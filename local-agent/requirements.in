@@ -1,0 +1,6 @@
+# Local agent runtime + test dependencies (runs on Linux, macOS and Windows: universal lock).
+typer
+keyring
+cryptography
+httpx
+pytest

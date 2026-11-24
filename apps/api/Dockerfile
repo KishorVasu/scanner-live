@@ -4,7 +4,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
 RUN useradd --uid 10001 --no-create-home app
 WORKDIR /srv
 COPY apps/api/requirements.lock .
-RUN pip install -r requirements.lock
+RUN pip install --require-hashes -r requirements.lock
 COPY libs/inventory /srv/libs/inventory
 RUN pip install --no-deps /srv/libs/inventory
 COPY apps/api/pyproject.toml apps/api/alembic.ini ./

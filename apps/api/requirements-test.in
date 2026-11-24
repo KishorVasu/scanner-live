@@ -1,0 +1,5 @@
+# Test-only dependencies (CI and dev); never installed in the API image.
+-c requirements.lock
+pytest
+pytest-asyncio
+pgserver

@@ -22,7 +22,7 @@ Status: Phase 3 (Scanning), Docker-free parts built; awaiting Docker for live sc
 ```sh
 cd apps/api
 python -m venv .venv
-.venv/Scripts/python -m pip install -r requirements.lock   # Windows; .venv/bin/python on Linux/macOS
+.venv/Scripts/python -m pip install --require-hashes -r requirements.lock -r requirements-test.lock   # Windows; .venv/bin/python on Linux/macOS
 .venv/Scripts/python -m pip install --no-deps -e .
 .venv/Scripts/python -m pytest -q -rs
 ```
@@ -37,12 +37,25 @@ First admin: `python -m app.cli create-admin --email you@company` (TOTP enrolmen
 
 The API also needs the shared library: `.venv/Scripts/python -m pip install --no-deps -e ../../libs/inventory`.
 
+### Lockfiles
+
+Python lockfiles are hashed and universal (Linux, macOS, Windows), compiled with `uv` from the `requirements*.in`
+files. Edit the `.in` file, then recompile from the repository root, for example:
+
+```sh
+uv pip compile --universal --generate-hashes --python-version 3.12 --no-header apps/api/requirements.in -o apps/api/requirements.lock
+```
+
+Add `--upgrade-package NAME` to move one package; without it uv keeps the versions already in the lockfile.
+`requirements-test.lock` is constrained by `requirements.lock` (`-c`), so compile it from `apps/api`.
+Every install uses `--require-hashes`.
+
 ## Local agent
 
 ```sh
 cd local-agent
 python -m venv .venv
-.venv/Scripts/python -m pip install -r requirements.lock
+.venv/Scripts/python -m pip install --require-hashes -r requirements.lock
 .venv/Scripts/python -m pip install --no-deps -e ../libs/inventory -e .
 .venv/Scripts/python -m pytest -q -rs        # symlink tests skip on Windows without symlink rights
 ```

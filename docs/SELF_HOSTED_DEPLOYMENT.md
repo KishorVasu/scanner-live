@@ -25,6 +25,7 @@ unit and DB tests (embedded Postgres), no containers. Container work is verified
 | `scan-runner` | scan-control | none | Only service with access to the container runtime. Accepts only allowlisted digests and fixed templates. |
 | `postgres` | data | none | Daily encrypted backup. |
 | `redis` | data | none | Password-protected; `protected-mode yes`; no persistence of secrets. |
+| `scan-proxy` | scan, egress | none | Squid allowlisting forward proxy for scanner egress (`SCANNING_STRATEGY.md` §4.1). Design approved in principle (OQ-9); not built yet. |
 | scanner containers | `scan` (or none) | none | Created per job by scan-runner, deleted after. |
 
 ## 3. Networks
@@ -35,7 +36,8 @@ unit and DB tests (embedded Postgres), no containers. Container work is verified
 | `app` | caddy, web, api | HTTP between proxy, dashboard and API. |
 | `data` | api, worker, beat, postgres, redis | `internal: true`; no published ports. |
 | `scan-control` | worker, scan-runner | `internal: true`; job requests and report return. |
-| `scan` | scanner containers (when egress is needed) | Egress restricted to the per-scanner allowlist (`SCANNING_STRATEGY.md` §4, OQ-9). |
+| `scan` | scanner containers (when egress is needed), scan-proxy | `internal: true`; the only way out is `scan-proxy` (`SCANNING_STRATEGY.md` §4). |
+| `egress` | scan-proxy | Outbound only for the proxy. |
 
 ## 4. Egress
 

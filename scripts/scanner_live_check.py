@@ -33,9 +33,9 @@ PLAN = {
     "npm_audit": (None, {"expect": "lodash"}),
     "pip_audit": ("requirements.txt", {"expect": "django", "image_ref": "sp-pip-audit:ci"}),
     "gitleaks": (None, {"expect": "github-pat"}),
-    # Expected to fail until OQ-9 is decided: offline Trivy needs a vulnerability DB mirror; Semgrep needs baked rules.
+    # Expected to fail until the OQ-9 DB mirror exists: offline Trivy has no vulnerability DB yet.
     "trivy": (None, {"expect_failure": "no vulnerability DB mirror yet (OQ-9)"}),
-    "semgrep": (None, {"expect_failure": "no rule packs baked into the image yet"}),
+    "semgrep": (None, {"expect": "subprocess-shell-true", "image_ref": "sp-semgrep:ci"}),
 }
 
 
@@ -55,6 +55,8 @@ def fixture() -> tuple[Path, str]:
     (d / "Dockerfile").write_text("FROM alpine:3.10\nUSER root\nCMD [\"true\"]\n")
     fake = "ghp_" + "".join(secrets.choice(string.ascii_letters + string.digits) for _ in range(36))
     (d / "config.js").write_text(f"const token = '{fake}';\n")
+    # Pattern for Semgrep to flag; never imported or run.
+    (d / "tool.py").write_text("import subprocess\n\n\ndef run(cmd):\n    return subprocess.call(cmd, shell=True)\n")
     sh("git", "init", "-q", str(d))
     sh("git", "-C", str(d), "-c", "user.email=ci@example.test", "-c", "user.name=ci", "add", ".")
     sh("git", "-C", str(d), "-c", "user.email=ci@example.test", "-c", "user.name=ci", "commit", "-qm", "fixture")
@@ -125,7 +127,8 @@ def main() -> int:
         if r["secret_leaked_into_report"]:
             failures.append(f"{scanner}: fake secret appears in the report")
         if "expect" in opts:
-            hit = opts["expect"] in r.get("rules", []) + r.get("packages", [])
+            # Semgrep rule IDs are long dotted paths, so match on a substring.
+            hit = any(opts["expect"] in x for x in r.get("rules", []) + r.get("packages", []))
             if r.get("outcome") != "parsed" or not hit:
                 failures.append(f"{scanner}: expected {opts['expect']!r}, got {r.get('outcome')} {r.get('rules')}")
         elif r.get("outcome") == "parsed":

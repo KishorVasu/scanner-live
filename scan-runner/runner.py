@@ -33,7 +33,9 @@ TEMPLATES: dict[str, dict] = {
                  # The source volume is owned by another uid; let git read it (read-only mount, nothing executes).
                  "env": {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "safe.directory", "GIT_CONFIG_VALUE_0": "/src"}},
     "semgrep": {"argv": ["semgrep", "scan", "--config", "/rules", "--json", "--output", "/report/report.json",
-                         "--metrics", "off", "--disable-version-check", "/src"], "report": "file"},
+                         "--metrics", "off", "--disable-version-check", "/src"], "report": "file",
+                # Rules are baked into the image (scanners/images/semgrep); semgrep's settings/logs go to the tmpfs.
+                "env": {"HOME": "/tmp", "XDG_CONFIG_HOME": "/tmp/.config", "XDG_CACHE_HOME": "/tmp/.cache"}},
     "trivy": {"argv": ["fs", "--format", "json", "--output", "/report/report.json", "--scanners", "vuln,misconfig",
                        "--skip-db-update", "--offline-scan", "/src"], "report": "file"},
 }

@@ -1,0 +1,107 @@
+colorama==0.4.6 ; sys_platform == 'win32' \
+    --hash=sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44 \
+    --hash=sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6
+    # via
+    #   -c C:/Users/Windows/AppData/Local/Temp/tmp.cwN8OcmCkX/api-old.txt
+    #   pytest
+fasteners==0.20 \
+    --hash=sha256:55dce8792a41b56f727ba6e123fcaee77fd87e638a6863cec00007bfea84c8d8 \
+    --hash=sha256:9422c40d1e350e4259f509fb2e608d6bc43c0136f79a00db1b49046029d0b3b7
+    # via
+    #   -c C:/Users/Windows/AppData/Local/Temp/tmp.cwN8OcmCkX/api-old.txt
+    #   pgserver
+iniconfig==2.3.1 \
+    --hash=sha256:67f4b9c50da0dedf52af349e7749a80a9057a5031199791b906c3bb3ae878960 \
+    --hash=sha256:9121e2c1fdb355232495be3194c8dfe87ccc2d5dee45947b78e68f499790d7a7
+    # via
+    #   -c C:/Users/Windows/AppData/Local/Temp/tmp.cwN8OcmCkX/api-old.txt
+    #   pytest
+packaging==26.4 \
+    --hash=sha256:81383611a09c1bc0b08b76e0fd5829d7c6824c65b27a6aee339da133f4233ea2 \
+    --hash=sha256:c4b671c41ddb9bf26e543c37723610d28fb6bf7affc4da17cf048d419d2c062a
+    # via
+    #   -c C:/Users/Windows/AppData/Local/Temp/tmp.cwN8OcmCkX/api-old.txt
+    #   pytest
+pgserver==0.1.4 \
+    --hash=sha256:0cc5a64f40749c0e9752cd63784e63dfcf1f3e5ecd2279b6b59f7c64fb520fb4 \
+    --hash=sha256:1a5d07c61d51f2abfef4ef61e2ef5cd014b994f7e09de8d3c140d2cf370e84a8 \
+    --hash=sha256:206e58be4f01db433df882c6d781ea1058d604f9c23acfc6ce3401ba717bc6ad \
+    --hash=sha256:2aa7897ab2894a460cfc430959f9640e27659fc8b8802f82b3f58632ae181218 \
+    --hash=sha256:2b902adff9dbfa65eac0405b914bd16a9d0b04e7710a02e4a172997b436135f4 \
+    --hash=sha256:406e9355334e40754160a33d93f18a848720a38cd0b68da50be2ea272c89ed2d \
+    --hash=sha256:780fa89f26a960cca0215caf471e70848dd8597bd8ceaeba7faf42170278980c \
+    --hash=sha256:79041d91d4d28e3a6a75dd472ee395e2da036ffd7f77cd826052697532291646 \
+    --hash=sha256:7be9cd117184aea1eaf9118b4c052c318dc13bb93d3cd9336329ad5b8d1729b1 \
+    --hash=sha256:854fa9394d495b3a332c954b63d4356b56d29220530e6d2aae146821bf87e05a \
+    --hash=sha256:a515926064743131f76c9cd2268b5d69f160371b89e7d9cc377102aa4087ae2d \
+    --hash=sha256:cb0e711e257dbfa2681d78c0bd789dd81753bc28c207889dcefa8f80706f3fed \
+    --hash=sha256:d595789b47624a3d963aa9aa6359da9be31beb7e61f1a45541953242068b8813 \
+    --hash=sha256:d9b7cf6f1611506654a7e948d99f8fb20895321474187401587d3fee1067e298 \
+    --hash=sha256:dc34f88561b18bc08edd98a84528f99a3720fe713a4e39a4a6210a4d009fe465 \
+    --hash=sha256:fb755fe493c479fcad1a1e9923fcc1f09d15cd2fb168e563c003b29f14a80545
+    # via
+    #   -c C:/Users/Windows/AppData/Local/Temp/tmp.cwN8OcmCkX/api-old.txt
+    #   -r requirements-test.in
+platformdirs==4.14.8 \
+    --hash=sha256:1e34af590de4d978631b751eb2202f2fee4497537a17c1720b12fcf57b331392 \
+    --hash=sha256:96893d686e84e9e6f358a9ea41a8de544df66dbf2ba6cda250e7dc73acf85b9b
+    # via
+    #   -c C:/Users/Windows/AppData/Local/Temp/tmp.cwN8OcmCkX/api-old.txt
+    #   pgserver
+pluggy==1.7.0 \
+    --hash=sha256:7dd7b0d8832ba3cb632c306926ded123429211b83641b35dc5c41ad2d34f9bec \
+    --hash=sha256:d1eaa46ebb595891b860ab086b4d09c8588af65ebd4361b8e8f4bb8920b90ba8
+    # via
+    #   -c C:/Users/Windows/AppData/Local/Temp/tmp.cwN8OcmCkX/api-old.txt
+    #   pytest
+psutil==7.2.2 \
+    --hash=sha256:0746f5f8d406af344fd547f1c8daa5f5c33dbc293bb8d6a16d80b4bb88f59372 \
+    --hash=sha256:076a2d2f923fd4821644f5ba89f059523da90dc9014e85f8e45a5774ca5bc6f9 \
+    --hash=sha256:11fe5a4f613759764e79c65cf11ebdf26e33d6dd34336f8a337aa2996d71c841 \
+    --hash=sha256:1a571f2330c966c62aeda00dd24620425d4b0cc86881c89861fbc04549e5dc63 \
+    --hash=sha256:1a7b04c10f32cc88ab39cbf606e117fd74721c831c98a27dc04578deb0c16979 \
+    --hash=sha256:1fa4ecf83bcdf6e6c8f4449aff98eefb5d0604bf88cb883d7da3d8d2d909546a \
+    --hash=sha256:2edccc433cbfa046b980b0df0171cd25bcaeb3a68fe9022db0979e7aa74a826b \
+    --hash=sha256:7b6d09433a10592ce39b13d7be5a54fbac1d1228ed29abc880fb23df7cb694c9 \
+    --hash=sha256:8c233660f575a5a89e6d4cb65d9f938126312bca76d8fe087b947b3a1aaac9ee \
+    --hash=sha256:917e891983ca3c1887b4ef36447b1e0873e70c933afc831c6b6da078ba474312 \
+    --hash=sha256:ab486563df44c17f5173621c7b198955bd6b613fb87c71c161f827d3fb149a9b \
+    --hash=sha256:ae0aefdd8796a7737eccea863f80f81e468a1e4cf14d926bd9b6f5f2d5f90ca9 \
+    --hash=sha256:b0726cecd84f9474419d67252add4ac0cd9811b04d61123054b9fb6f57df6e9e \
+    --hash=sha256:b58fabe35e80b264a4e3bb23e6b96f9e45a3df7fb7eed419ac0e5947c61e47cc \
+    --hash=sha256:c7663d4e37f13e884d13994247449e9f8f574bc4655d509c3b95e9ec9e2b9dc1 \
+    --hash=sha256:e452c464a02e7dc7822a05d25db4cde564444a67e58539a00f929c51eddda0cf \
+    --hash=sha256:e78c8603dcd9a04c7364f1a3e670cea95d51ee865e4efb3556a3a63adef958ea \
+    --hash=sha256:eb7e81434c8d223ec4a219b5fc1c47d0417b12be7ea866e24fb5ad6e84b3d988 \
+    --hash=sha256:ed0cace939114f62738d808fdcecd4c869222507e266e574799e9c0faa17d486 \
+    --hash=sha256:eed63d3b4d62449571547b60578c5b2c4bcccc5387148db46e0c2313dad0ee00 \
+    --hash=sha256:fd04ef36b4a6d599bbdb225dd1d3f51e00105f6d48a28f006da7f9822f2606d8
+    # via
+    #   -c C:/Users/Windows/AppData/Local/Temp/tmp.cwN8OcmCkX/api-old.txt
+    #   pgserver
+pygments==2.21.0 \
+    --hash=sha256:2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9 \
+    --hash=sha256:610ca751c9bc2492b38eb9a38a7fbc93edbbb2d7182edaf34e66ae493dee5c8c
+    # via
+    #   -c C:/Users/Windows/AppData/Local/Temp/tmp.cwN8OcmCkX/api-old.txt
+    #   pytest
+pytest==9.2.0 \
+    --hash=sha256:07acdcf88ec174f907dc01af70bf52d49b014bbab03faeeade31c96b18c2e588 \
+    --hash=sha256:97c4f3b1f3c7414aa36465e09b8220f1d03627993bd51b1282e193753c80557b
+    # via
+    #   -c C:/Users/Windows/AppData/Local/Temp/tmp.cwN8OcmCkX/api-old.txt
+    #   -r requirements-test.in
+    #   pytest-asyncio
+pytest-asyncio==1.5.0 \
+    --hash=sha256:557f255ee03cc84f84a8d5f438bc9c6e0f714bf86970ae743c7ecb5a38d7e07d \
+    --hash=sha256:92c8fa83ca419fd0d4bd6a34df6520dae435841d3733c319343249492adf37f7
+    # via
+    #   -c C:/Users/Windows/AppData/Local/Temp/tmp.cwN8OcmCkX/api-old.txt
+    #   -r requirements-test.in
+typing-extensions==4.16.0 ; python_full_version < '3.13' \
+    --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8 \
+    --hash=sha256:dc983d19a509c94dba722ee6abd33940f7c05a89e243c47e907eb4db6f1a43e5
+    # via
+    #   -c C:/Users/Windows/AppData/Local/Temp/tmp.cwN8OcmCkX/api-old.txt
+    #   -c requirements.lock
+    #   pytest-asyncio

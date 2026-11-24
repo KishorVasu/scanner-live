@@ -163,8 +163,10 @@ security-platform/
 | OQ-6 | Do any client contracts forbid sending redacted findings to an external LLM? | `llm_allowed = true` default; per-project override. |
 | OQ-7 | Load the 19 November GitHub incident and the MERN server compromise as first incident records? | Yes, as tuning input for integrity checks, once evidence is supplied. |
 | OQ-8 | Approve the three proposed changes: Grafana/OTel to Phase 6; in-house orchestrator instead of Claude Agent SDK; Semgrep CE default with Opengrep fallback. | Treated as approved in these docs. |
-| OQ-9 | Scanner egress enforcement: allowlisting forward proxy (new component), host firewall, or offline DBs? | Offline DBs for OSV/Trivy + forward proxy for npm/pip audit. |
+| OQ-9 | Scanner egress enforcement: allowlisting forward proxy (new component), host firewall, or offline DBs? | **Decided 2026-11-24:** offline DBs for OSV/Trivy + allowlisting forward proxy for npm/pip audit (new component approved; design before build). |
 | OQ-10 | Approve the library list in Phase 1. | Pending. |
 | OQ-11 | Approve the six supporting tables in `DATABASE_SCHEMA.md` §7. | Pending. |
 | OQ-12 | Local agent: dev machine is Windows. Keep macOS/Linux first and run boundary tests in Linux CI? | Yes. |
 | OQ-13 | `Installed Skills and Tools.pdf` was not found. Supply it or skip? | Skipped; `installed-skills-and-tools.md` used. |
+| OQ-14 | Semgrep rule packs to bake into the scanner image. | **Decided 2026-11-24:** p/default, p/owasp-top-ten, p/secrets, plus language packs for the company stacks. |
+| OQ-15 | Hashed Python lockfiles: uv or pip-tools? | **Decided 2026-11-24:** uv (`uv pip compile --universal --generate-hashes`). pip-tools was picked first, but it can only lock for the OS it runs on (Windows dev PC, Linux targets); the user then left the choice to the lead engineer. uv is a dev tool only, not a runtime dependency. |
