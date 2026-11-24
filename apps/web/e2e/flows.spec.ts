@@ -1,6 +1,5 @@
 import { createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Browser, type Page } from "@playwright/test";
 
@@ -10,7 +9,7 @@ import { expect, test, type Browser, type Page } from "@playwright/test";
  */
 
 type Cred = { email: string; password: string; totp: string; id: string };
-const creds: Record<string, Cred> = JSON.parse(readFileSync(join(__dirname, ".creds.json"), "utf8"));
+const creds: Record<string, Cred> = JSON.parse(readFileSync(new URL(".creds.json", import.meta.url), "utf8"));
 
 function totp(secretB32: string, offsetSteps = 0): string {
   const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
