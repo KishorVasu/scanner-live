@@ -1,0 +1,5 @@
+
+# Playwright (e2e): seeded fixture credentials and reports, CI only
+e2e/.creds.json
+playwright-report/
+test-results/

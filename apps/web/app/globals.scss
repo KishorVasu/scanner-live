@@ -15,3 +15,21 @@ body {
   outline: 2px solid #1d4ed8;
   outline-offset: 2px;
 }
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.field {
+  margin-bottom: 0.75rem;
+
+  label {
+    display: block;
+    margin-bottom: 0.25rem;
+  }
+}

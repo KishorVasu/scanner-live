@@ -100,6 +100,8 @@ Hard constraint: no external project repository is touched in Phases 0–2 beyon
 
 ## Phase 4 — Intelligence
 
+**Approved 2026-11-24** (built in `cbaabea`, CI run 9 green). Open: first real Claude call needs the API key on the server; `fetch-proxy` is not exercised in CI.
+
 **Plan approved 2026-11-24** with these decisions: worker egress through a second Squid allowlist (`fetch-proxy`); the
 Anthropic API key in `deploy/secrets/anthropic_api_key` (an empty file disables LLM steps); no NVD API key; OSV does the
 version-range matching (no in-house range evaluators). Model: `claude-opus-5-5`, effort `medium`, server-side refusal
@@ -115,6 +117,10 @@ fallback on; JSON output only, the model gets no tools.
 - [ ] `llm_allowed = false` projects never reach the LLM (test).
 
 ## Phase 5 — Dashboard and reports
+
+**Plan approved 2026-11-24** with these decisions: Playwright e2e runs on every push to `main` (not nightly);
+`@axe-core/playwright` added as a dev dependency for accessibility checks; reports carry an optional Claude narrative
+(labelled AI, never for `llm_allowed = false` projects, tables-only fallback, deterministic check against safety claims).
 
 **Scope:** Overview, Projects, project detail, Security Intelligence, Scans & Findings (triage), Repository Integrity, Approvals, Reports (draft to approved, PDF via WeasyPrint), Settings, Audit Log.
 

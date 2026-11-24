@@ -23,7 +23,7 @@ Rule: never report tests as passing unless they were run in the current session 
 | Retry / failure | pytest with fault injection (scanner crash, timeout, bad JSON) | CI |
 | LLM agents | pytest with a fake `LLMProvider` returning scripted tool calls; no network | CI |
 | Frontend components | Vitest + Testing Library | CI |
-| End-to-end | Playwright against the Compose stack | CI nightly, before each phase gate |
+| End-to-end | Playwright + axe (WCAG 2 A/AA, serious and critical) against the API and `next dev` with a seeded throwaway database (`scripts/e2e_seed.py`) | CI on every push to `main` (Phase 5 decision) |
 
 The Anthropic API is never called in CI. The `LLMProvider` interface makes the fake provider a drop-in.
 

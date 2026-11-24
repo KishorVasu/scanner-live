@@ -67,6 +67,24 @@ def scans_plan(cadence: str) -> int:
     return asyncio.run(run())
 
 
+@celery.task(name="reports.generate", time_limit=900, soft_time_limit=840)
+def reports_generate(project_id: str | None, created_by: str) -> str:
+    import uuid
+
+    from app.agents import reports
+    from app.db.session import get_engine, get_sessionmaker
+
+    async def run() -> str:
+        try:
+            async with get_sessionmaker()() as db:
+                pid = uuid.UUID(project_id) if project_id else None
+                return (await reports.run(db, pid, uuid.UUID(created_by))).status.value
+        finally:
+            await get_engine().dispose()
+
+    return asyncio.run(run())
+
+
 @celery.task(name="intel.run", time_limit=3600, soft_time_limit=3540)
 def intel_run() -> dict:
     from app.agents.intel import run_pipeline_sync

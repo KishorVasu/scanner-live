@@ -1,6 +1,6 @@
 # CLAUDE.md — Security Platform rules
 
-Status: Phase 3 (Scanning) approved 2026-11-24 with two carried items (pilot scans; source fetch), both blocked on the GitHub org / pilot names and the digest review. Phase 4 (Intelligence): planning, awaiting plan approval. Dev PC runs no Docker (decision 2026-11-24): container work is verified in GitHub CI and on the Linux server; architecture unchanged. Design docs in `docs/` are the approved source of truth; open-question defaults in `docs/IMPLEMENTATION_ROADMAP.md` apply until answered.
+Status: Phase 3 (Scanning) approved 2026-11-24 with two carried items (pilot scans; source fetch), both blocked on the GitHub org / pilot names and the digest review. Phase 4 (Intelligence) approved 2026-11-24 (CI run 9 green); first real LLM call waits for the API key on the server. Phase 5 (Dashboard and reports): planning, awaiting plan approval. Dev PC runs no Docker (decision 2026-11-24): container work is verified in GitHub CI and on the Linux server; architecture unchanged. Design docs in `docs/` are the approved source of truth; open-question defaults in `docs/IMPLEMENTATION_ROADMAP.md` apply until answered.
 
 You are the lead engineer building a self-hosted security monitoring platform for a software company that runs 15 to 20 mixed-technology projects (Next.js, React, Node.js/Express, Python/Django/FastAPI, Laravel/PHP, Flutter, native iOS and Android, Unity games, MongoDB, PostgreSQL, MySQL, Redis, Docker, Linux servers, GitHub Actions).
 

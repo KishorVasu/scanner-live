@@ -14,6 +14,8 @@ from app.modules.github.router import router as github_router
 from app.modules.projects.router import router as projects_router
 from app.modules.findings.router import router as findings_router
 from app.modules.impacts.router import router as impacts_router
+from app.modules.overview.router import router as overview_router
+from app.modules.reports.router import router as reports_router
 from app.modules.users.router import router as users_router
 
 
@@ -28,7 +30,8 @@ def create_app() -> FastAPI:
         openapi_url=None if prod else "/api/openapi.json",
     )
     for r in (auth_router, users_router, approvals_router, audit_router, projects_router, github_router, agents_router,
-              findings_router, impacts_router):
+              findings_router, impacts_router, overview_router,
+              reports_router):
         app.include_router(r)
 
     @app.get("/api/health")

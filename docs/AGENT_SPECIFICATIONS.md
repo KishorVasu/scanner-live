@@ -167,6 +167,8 @@ Forbidden action names registered as explicit deny policies: `edit_file`, `write
 - **Approval required for:** `request_targeted_scan` when it would execute code.
 
 ### 5.8 Report Generation (Phase 5)
+- **Built 2026-11-24** (`app/agents/reports.py`). Tools: `read_report_data`, `save_report_draft`; the save tool rebuilds
+  the tables from the database and refuses a narrative that claims safety. PDF via WeasyPrint with all remote fetches refused.
 - **Purpose:** Draft project and portfolio reports.
 - **Uses Claude:** Yes (narrative), deterministic tables.
 - **Tools:** `read_findings`, `read_impacts`, `render_pdf`, `submit_result`.

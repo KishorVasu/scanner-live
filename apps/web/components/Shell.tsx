@@ -6,9 +6,9 @@ import { useEffect, useState } from "react";
 import { Button } from "primereact/button";
 import { api, ApiError } from "@/lib/api";
 import { SECTIONS } from "@/lib/sections";
+import { MeContext, type Me } from "@/lib/me";
 import styles from "./Shell.module.scss";
 
-type Me = { email: string; roles: string[] };
 
 export default function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -50,7 +50,9 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           <span>{me.email} · {me.roles.join(", ")}</span>
           <Button label="Sign out" text onClick={logout} />
         </header>
-        <main>{children}</main>
+        <MeContext.Provider value={me}>
+          <main>{children}</main>
+        </MeContext.Provider>
       </div>
     </div>
   );

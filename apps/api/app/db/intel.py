@@ -79,3 +79,25 @@ class ProjectImpact(Timestamps, Base):
     decided_by_rule: Mapped[str | None] = mapped_column(String(64))
     decided_by_run_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("agent_runs.id", ondelete="RESTRICT"))
     decided_at: Mapped[datetime]
+
+
+class ReportStatus(enum.StrEnum):
+    draft = "draft"
+    approved = "approved"
+
+
+class Report(Timestamps, Base):
+    """Phase 5. Content is frozen at generation; the PDF is rendered from it. DB constraints forbid self-approval."""
+
+    __tablename__ = "reports"
+    kind: Mapped[str] = mapped_column(String(16))
+    project_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("projects.id", ondelete="RESTRICT"), index=True)
+    title: Mapped[str] = mapped_column(String(300))
+    status: Mapped[ReportStatus] = mapped_column(pg_enum(ReportStatus, "report_status"))
+    content: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    narrative: Mapped[str | None] = mapped_column(Text)
+    narrative_note: Mapped[str | None] = mapped_column(String(300))
+    generated_by_run_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("agent_runs.id", ondelete="RESTRICT"))
+    created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    approved_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    approved_at: Mapped[datetime | None]
