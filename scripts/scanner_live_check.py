@@ -23,6 +23,7 @@ os.environ.setdefault("SP_ENVIRONMENT", "test")
 
 import runner  # noqa: E402
 from app.scanners.adapters import ADAPTERS  # noqa: E402
+from app.scanners.base import ReportError  # noqa: E402
 
 HELPER = "node:22-alpine@sha256:1314fb30ec37592d5845e5a160d522c0e680972aa534549940b8d73bde88481a"
 
@@ -75,19 +76,29 @@ def run_one(scanner: str, src: Path, images: dict, target, opts: dict, fake: str
         if runner.TEMPLATES[scanner]["report"] == "stdout":
             report = proc.stdout
         else:
-            report = sh("docker", "run", "--rm", "-v", f"{vol_rep}:/report:ro", HELPER, "cat", "/report/report.json",
-                        check=False).stdout
+            readback = sh("docker", "run", "--rm", "-v", f"{vol_rep}:/report:ro", HELPER, "sh", "-c",
+                          "ls -la /report >&2; cat /report/report.json", check=False)
+            report = readback.stdout
         adapter = ADAPTERS[scanner]
         result = {"scanner": scanner, "exit_code": proc.returncode, "report_bytes": len(report),
-                  "stderr_tail": proc.stderr.decode("utf-8", "replace")[-400:]}
+                  "stderr_tail": proc.stderr.decode("utf-8", "replace")[-1500:]}
+        if runner.TEMPLATES[scanner]["report"] != "stdout":
+            result["report_dir"] = readback.stderr.decode("utf-8", "replace")[-600:]
+        result["secret_leaked_into_report"] = fake.encode() in report
+        if fake in result["stderr_tail"]:  # the evidence file is uploaded; never let the fake token ride along
+            result["stderr_tail"] = "<withheld: contained the fixture token>"
+            result["secret_leaked_into_report"] = True
         if proc.returncode not in adapter.ok_exit_codes:
             result["outcome"] = "failed"
         else:
-            parsed = adapter.parse(report)
-            result |= {"outcome": "parsed", "findings": len(parsed.findings),
-                       "rules": sorted({f.rule_id for f in parsed.findings})[:20],
-                       "packages": sorted({f.package for f in parsed.findings if f.package})[:20]}
-        result["secret_leaked_into_report"] = fake.encode() in report
+            try:
+                parsed = adapter.parse(report)
+            except ReportError as e:
+                result["outcome"] = f"report_error: {e}"
+            else:
+                result |= {"outcome": "parsed", "findings": len(parsed.findings),
+                           "rules": sorted({f.rule_id for f in parsed.findings})[:20],
+                           "packages": sorted({f.package for f in parsed.findings if f.package})[:20]}
         return result
     finally:
         sh("docker", "volume", "rm", "-f", vol_src, vol_rep, check=False)
@@ -102,7 +113,11 @@ def main() -> int:
     src, fake = fixture()
     results, failures = [], []
     for scanner, (target, opts) in PLAN.items():
-        r = run_one(scanner, src, images, target, opts, fake)
+        try:
+            r = run_one(scanner, src, images, target, opts, fake)
+        except Exception as e:  # keep going: one broken scanner must not hide the others' evidence
+            r = {"scanner": scanner, "outcome": f"error: {type(e).__name__}: {e}"[:600],
+                 "secret_leaked_into_report": False}
         r["digest"] = images[scanner]["digest"]
         results.append(r)
         if r["secret_leaked_into_report"]:
