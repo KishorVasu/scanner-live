@@ -1,0 +1,13 @@
+[project]
+name = "sp-inventory"
+version = "0.1.0"
+description = "Technology detection, manifest parsing and inventory hashing shared by the API and the local agent (stdlib only)."
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.setuptools.packages.find]
+include = ["sp_inventory*"]

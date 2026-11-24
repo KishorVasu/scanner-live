@@ -1,0 +1,18 @@
+[project]
+name = "security-agent"
+version = "0.1.0"
+description = "Local agent for the Security Platform: inventories administrator-approved folders, read-only, outbound HTTPS only."
+requires-python = ">=3.12"
+dependencies = ["typer", "keyring", "cryptography", "httpx", "sp-inventory"]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[project.scripts]
+security-agent = "security_agent.cli:app"
+
+[tool.setuptools.packages.find]
+include = ["security_agent*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,28 @@
+.wrap {
+  max-width: 24rem;
+  margin: 10vh auto;
+  padding: 2rem;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.1);
+}
+
+.title {
+  margin-top: 0;
+  font-size: 1.4rem;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.uri {
+  word-break: break-all;
+  font-size: 0.8rem;
+  background: #f1f5f9;
+  padding: 0.5rem;
+  border-radius: 4px;
+}

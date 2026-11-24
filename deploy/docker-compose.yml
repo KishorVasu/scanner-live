@@ -1,0 +1,171 @@
+# Security Platform. One Linux host. See docs/SELF_HOSTED_DEPLOYMENT.md.
+# Rule R8: only scan-runner may ever get a container runtime socket (not mounted in Phase 1; it starts nothing yet).
+
+x-hardening: &hardening
+  restart: unless-stopped
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  tmpfs: ["/tmp"]
+  logging:
+    driver: json-file
+    options: { max-size: "20m", max-file: "5" }
+
+x-api-env: &api-env
+  SP_ENVIRONMENT: production
+  SP_DATABASE_URL: postgresql+asyncpg://platform_app@postgres:5432/platform
+  SP_DATABASE_PASSWORD_FILE: /run/secrets/pg_app_password
+  SP_REDIS_URL: redis://redis:6379/0
+  SP_REDIS_PASSWORD_FILE: /run/secrets/redis_password
+  SP_MASTER_KEY_FILE: /run/secrets/master_key
+  SP_REDACTION_SALT_FILE: /run/secrets/redaction_salt
+
+services:
+  caddy:
+    <<: *hardening
+    image: caddy:2-alpine@sha256:003a97808e781aa9f7e75cc2f43d34d461099031faf5e20faefb9f61126836f0
+    cap_add: [NET_BIND_SERVICE]
+    ports: ["443:443", "80:80"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS}
+    networks: [public, app]
+    depends_on: [web, api]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]
+      interval: 30s
+    deploy: { resources: { limits: { cpus: "0.5", memory: 256m, pids: 200 } } }
+
+  web:
+    <<: *hardening
+    build: ../apps/web
+    networks: [app]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/login"]
+      interval: 30s
+    deploy: { resources: { limits: { cpus: "1", memory: 512m, pids: 200 } } }
+
+  api:
+    <<: *hardening
+    build: { context: .., dockerfile: apps/api/Dockerfile }
+    environment: *api-env
+    secrets: [pg_app_password, master_key, redaction_salt, redis_password]
+    networks: [app, data, egress]
+    depends_on:
+      postgres: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 30s
+    deploy: { resources: { limits: { cpus: "1", memory: 512m, pids: 200 } } }
+
+  migrate:
+    build: { context: .., dockerfile: apps/api/Dockerfile }
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    command: ["sh", "-c", "SP_MIGRATION_DATABASE_URL=postgresql+asyncpg://platform_owner:$$(cat /run/secrets/pg_owner_password)@postgres:5432/platform alembic upgrade head"]
+    secrets: [pg_owner_password]
+    networks: [data]
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+
+  worker:
+    <<: *hardening
+    build: { context: .., dockerfile: apps/api/Dockerfile }
+    command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=INFO", "--concurrency=2"]
+    environment: *api-env
+    secrets: [pg_app_password, master_key, redaction_salt, redis_password]
+    networks: [data, scan-control, egress]
+    depends_on:
+      redis: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "celery", "-A", "app.workers.celery_app", "inspect", "ping", "--timeout", "10"]
+      interval: 60s
+    deploy: { resources: { limits: { cpus: "2", memory: 1g, pids: 300 } } }
+
+  beat:
+    <<: *hardening
+    build: { context: .., dockerfile: apps/api/Dockerfile }
+    command: ["celery", "-A", "app.workers.celery_app", "beat", "--loglevel=INFO", "--schedule", "/tmp/celerybeat-schedule"]
+    environment: *api-env
+    secrets: [pg_app_password, master_key, redaction_salt, redis_password]
+    networks: [data]
+    depends_on:
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os;assert os.path.exists('/tmp/celerybeat-schedule')"]
+      interval: 60s
+    deploy: { resources: { limits: { cpus: "0.25", memory: 256m, pids: 100 } } }
+
+  scan-runner:
+    <<: *hardening
+    build: { context: .., dockerfile: scan-runner/Dockerfile }
+    networks: [scan-control]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8080/health')"]
+      interval: 30s
+    deploy: { resources: { limits: { cpus: "0.5", memory: 256m, pids: 100 } } }
+
+  postgres:
+    image: postgres:16-alpine@sha256:f2f98726820d0342055351c6e9d36e705f5bfffb3dd53ff556325114b08afb6d
+    restart: unless-stopped
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      POSTGRES_USER: platform_owner
+      POSTGRES_DB: platform
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_owner_password
+    secrets: [pg_owner_password, pg_app_password, pg_readonly_password]
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    networks: [data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U platform_owner -d platform"]
+      interval: 10s
+    deploy: { resources: { limits: { cpus: "2", memory: 2g, pids: 300 } } }
+
+  redis:
+    image: redis:7-alpine@sha256:7f7d30b7fdd09467bac58198a1f166dd69789d348d4fe859cccb20e0cf287fbe
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    command: ["sh", "-c", "exec redis-server --requirepass \"$$(cat /run/secrets/redis_password)\" --appendonly no --save ''"]
+    secrets: [redis_password]
+    networks: [data]
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$(cat /run/secrets/redis_password)\" redis-cli ping | grep PONG"]
+      interval: 10s
+    deploy: { resources: { limits: { cpus: "0.5", memory: 256m, pids: 100 } } }
+
+networks:
+  public: {}
+  app: { internal: true }
+  data: { internal: true }
+  scan-control: { internal: true }
+  # Outbound HTTPS for api (GitHub) and worker (Anthropic, GitHub, advisory feeds). Host firewall restricts
+  # destinations (docs/SELF_HOSTED_DEPLOYMENT.md §4, OQ-9).
+  egress: {}
+  # Phase 3: per-scanner allowlisted egress for scanner containers.
+  scan: { internal: true }
+
+volumes:
+  pg_data: {}
+  caddy_data: {}
+  caddy_config: {}
+
+secrets:
+  pg_owner_password: { file: ./secrets/pg_owner_password }
+  pg_app_password: { file: ./secrets/pg_app_password }
+  pg_readonly_password: { file: ./secrets/pg_readonly_password }
+  master_key: { file: ./secrets/master_key }
+  redaction_salt: { file: ./secrets/redaction_salt }
+  redis_password: { file: ./secrets/redis_password }

@@ -1,0 +1,26 @@
+{
+  "_comment": "Pinned scanner images (rule R7). scan-runner refuses an image unless it has a sha256 digest AND reviewed_by is set by a person after checking the release, signature/checksum and the CI scanner-live run. Digests below were resolved from the registries' manifest APIs on 2026-11-24; signatures are not yet verified and nothing is mirrored yet. Trivy: GHSA-69fq-xp46-6x23 lists only 0.69.4 as compromised; 0.76.2 is outside that range.",
+  "registry": null,
+  "images": {
+    "osv_scanner": {"image": "ghcr.io/google/osv-scanner", "version": "v2.7.1",
+                    "digest": "sha256:a70ffffc2bfd33482953e5d6b64c6fcdb30239717a07b0f0d3ab2859ce3e4cde",
+                    "network": "egress", "reviewed_by": null},
+    "npm_audit": {"image": "node", "version": "22-alpine",
+                  "digest": "sha256:1314fb30ec37592d5845e5a160d522c0e680972aa534549940b8d73bde88481a",
+                  "network": "egress", "reviewed_by": null},
+    "pip_audit": {"image": "sp-pip-audit (built from scanners/images/pip-audit/Dockerfile)", "version": "2.10.1",
+                  "digest": null, "network": "egress", "reviewed_by": null,
+                  "note": "digest is filled from the CI build of the Dockerfile after review"},
+    "gitleaks": {"image": "ghcr.io/gitleaks/gitleaks", "version": "v8.30.1",
+                 "digest": "sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f",
+                 "network": "none", "reviewed_by": null},
+    "semgrep": {"image": "semgrep/semgrep", "version": "1.186.0",
+                "digest": "sha256:6e1b04340e60e910fbb4ddbf3c857ab0918f064417ad5ac530014ccb3cf8c8f1",
+                "network": "none", "reviewed_by": null,
+                "note": "rule packs are not baked yet; /rules is empty, so Semgrep jobs fail until a rules image is built"},
+    "trivy": {"image": "aquasec/trivy", "version": "0.76.2",
+              "digest": "sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb",
+              "network": "none", "reviewed_by": null,
+              "note": "offline scan needs a vulnerability DB mirror (OQ-9); misconfiguration checks work offline"}
+  }
+}

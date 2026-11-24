@@ -1,0 +1,34 @@
+[project]
+name = "security-platform-api"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "pydantic",
+    "pydantic-settings",
+    "sqlalchemy[asyncio]",
+    "asyncpg",
+    "alembic",
+    "argon2-cffi",
+    "pyotp",
+    "cryptography",
+    "httpx",
+    "celery",
+    "redis",
+    "prometheus-client",
+    "sp-inventory",  # libs/inventory in this repo; installed from the path (see Dockerfile and CI)
+]
+
+[project.optional-dependencies]
+# pgserver: embedded throwaway Postgres for local DB tests when no TEST_PG_ADMIN_URL is set (approved 2026-11-24).
+test = ["pytest", "pytest-asyncio", "pgserver"]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+testpaths = ["tests"]

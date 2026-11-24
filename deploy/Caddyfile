@@ -1,0 +1,45 @@
+{
+	admin 127.0.0.1:2019
+}
+
+{$SITE_ADDRESS} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		-Server
+	}
+
+	# Local-agent inventory uploads can be large (big lockfiles); everything else stays at 1MB.
+	@inventory path /api/agents/me/inventory
+	request_body @inventory {
+		max_size 16MB
+	}
+	@small not path /api/agents/me/inventory
+	request_body @small {
+		max_size 1MB
+	}
+
+	# Caddy core has no rate limiter without a plugin, so limits live in the API: webhooks per repository,
+	# agent register per IP, agent challenge per agent, agent session failures per agent and per IP.
+
+	# Internal only. Must be a handle block: bare `respond` runs after `handle` and would never fire.
+	@internal path /metrics /metrics/*
+	handle @internal {
+		respond 404
+	}
+
+	# API responses get a locked-down CSP; the web app sets its own nonce-based CSP.
+	handle /api/* {
+		header Content-Security-Policy "default-src 'none'; frame-ancestors 'none'"
+		reverse_proxy api:8000
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+}

@@ -1,0 +1,13 @@
+# Repo-root build context: send only source, never secrets, venvs or build output.
+.git
+**/.venv
+**/node_modules
+**/.next
+**/__pycache__
+**/.pytest_cache
+**/*.egg-info
+**/.env
+**/.env.*
+deploy/secrets
+**/*.pem
+**/*.key
