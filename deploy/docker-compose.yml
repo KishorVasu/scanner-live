@@ -112,6 +112,22 @@ services:
       interval: 30s
     deploy: { resources: { limits: { cpus: "0.5", memory: 256m, pids: 100 } } }
 
+  # Allowlisting forward proxy: the only egress for scanner and DB-sync containers (docs/SCANNING_STRATEGY.md §4.1).
+  # Runs unprivileged as the image's proxy user (uid 13); 3128 needs no capability.
+  scan-proxy:
+    <<: *hardening
+    image: ubuntu/squid:6.6-24.04_edge@sha256:d9c34c5ab74c6dd41cf1070d9b4221aac072e67e983527ca2d41512958f77506
+    user: "13:13"
+    entrypoint: ["squid", "-N", "-f", "/etc/squid/squid.conf"]
+    tmpfs: ["/tmp", "/var/spool/squid", "/var/log/squid", "/run"]
+    volumes:
+      - ./scan-proxy/squid.conf:/etc/squid/squid.conf:ro
+    networks: [scan, scan-egress]
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/3128"]  # no pid file, so `squid -k check` cannot work
+      interval: 60s
+    deploy: { resources: { limits: { cpus: "0.5", memory: 256m, pids: 100 } } }
+
   postgres:
     image: postgres:16-alpine@sha256:f2f98726820d0342055351c6e9d36e705f5bfffb3dd53ff556325114b08afb6d
     restart: unless-stopped
@@ -154,11 +170,17 @@ networks:
   # Outbound HTTPS for api (GitHub) and worker (Anthropic, GitHub, advisory feeds). Host firewall restricts
   # destinations (docs/SELF_HOSTED_DEPLOYMENT.md §4, OQ-9).
   egress: {}
-  # Phase 3: per-scanner allowlisted egress for scanner containers.
-  scan: { internal: true }
+  # Scanner and DB-sync containers (started by scan-runner by network name, hence fixed names). Internal: the only
+  # way out is scan-proxy.
+  scan: { internal: true, name: sp-scan }
+  # Outbound for scan-proxy alone, so api/worker cannot use the proxy.
+  scan-egress: { name: sp-scan-egress }
 
 volumes:
   pg_data: {}
+  # Offline vulnerability DBs: written only by scan-runner's sync jobs, mounted read-only into scans.
+  sp-vulndb-osv: { name: sp-vulndb-osv }
+  sp-vulndb-trivy: { name: sp-vulndb-trivy }
   caddy_data: {}
   caddy_config: {}
 

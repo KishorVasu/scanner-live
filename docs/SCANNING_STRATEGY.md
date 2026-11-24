@@ -50,7 +50,8 @@ Scanners produce all detection evidence. Nothing in this document executes proje
 ## 4. Network allowlists
 
 Decided 2026-11-24 (OQ-9): offline databases for OSV-Scanner and Trivy, and one allowlisting forward proxy (Squid)
-for everything that still needs the internet. **Status: design, awaiting approval before build.**
+for everything that still needs the internet. **Status: approved and built 2026-11-24**; verified by the CI
+`scanner-live` job (real Squid, real DB downloads, offline scans).
 
 | Job | Network | Reaches |
 | --- | --- | --- |
@@ -58,15 +59,16 @@ for everything that still needs the internet. **Status: design, awaiting approva
 | Trivy scan | none | offline DB volume `sp-vulndb-trivy`, read-only |
 | npm audit | `scan` (via proxy) | `registry.npmjs.org` |
 | pip-audit | `scan` (via proxy) | `pypi.org` (default `pypi` vulnerability service; no OSV API needed) |
-| OSV DB sync (`osv_db_sync`) | `scan` (via proxy) | `osv-vulnerabilities.storage.googleapis.com`; writes `sp-vulndb-osv` |
-| Trivy DB sync (`trivy_db_sync`) | `scan` (via proxy) | `ghcr.io`, `pkg-containers.githubusercontent.com`; writes `sp-vulndb-trivy` |
+| OSV DB sync (`/sync` `osv`) | `scan` (via proxy) | `osv-vulnerabilities.storage.googleapis.com`; writes `sp-vulndb-osv` |
+| Trivy DB sync (`/sync` `trivy`) | `scan` (via proxy) | `ghcr.io`, `pkg-containers.githubusercontent.com`; writes `sp-vulndb-trivy` |
 | Semgrep, Gitleaks, CodeQL, integrity | none | nothing (Semgrep rules are baked into its image) |
 
 ### 4.1 Proxy (`scan-proxy`)
 
 - Squid, image pinned by digest, one fixed `squid.conf` in the repo. Its own service in Compose.
-- Networks: `scan` (`internal: true`, so scanner containers have no route anywhere except the proxy) and `egress`
-  (outbound only, no other members).
+- Networks: `sp-scan` (`internal: true`, so scanner containers have no route anywhere except the proxy) and
+  `sp-scan-egress` (outbound, the proxy is its only member, so api/worker cannot use the proxy).
+- Runs unprivileged as the image's `proxy` user (uid 13), read-only root, all capabilities dropped.
 - Rules: `CONNECT` to port 443 only, destination domain in the allowlist above, everything else denied. No TLS
   interception, no caching, `via off`, `forwarded_for delete`. Access log to stdout (host, status, bytes; no URLs or
   bodies, which could carry package lists).
@@ -77,20 +79,26 @@ for everything that still needs the internet. **Status: design, awaiting approva
 
 ### 4.2 Offline DB sync
 
-- Two new scan-runner templates run the pinned scanner images themselves in download-only mode
-  (`osv-scanner --download-offline-databases`, `trivy --download-db-only`), through the proxy, writing into their DB
-  volume. Same sandbox profile as scans; no new image, no egress for the worker.
-- Celery beat schedules both daily, before the dependency scans. Scans mount the DB volume read-only and run with
-  `--offline` (`--offline-vulnerabilities` for OSV-Scanner, `--skip-db-update --offline-scan` for Trivy).
-- Staleness: each sync writes the DB timestamp into the job result. A scan whose DB is older than 48 hours is
-  recorded as `partial` (never clean, never resolves findings); a missing DB fails the scan.
+- scan-runner `POST /sync {"db": "osv" | "trivy"}` (no other input) runs a fixed download job through the proxy,
+  same sandbox profile as scans, writing into `/db/incoming` of the DB volume:
+  - Trivy: the pinned Trivy image, `image --download-db-only --db-repository ghcr.io/aquasecurity/trivy-db:2`.
+  - OSV: osv-scanner can only download DBs for ecosystems found in a scanned lockfile, so a pinned `curl` image
+    (`images.lock` entry `curl`, review-gated like the scanners) fetches `<ecosystem>/all.zip` from the OSV bucket for
+    a fixed ecosystem list (`OSV_ECOSYSTEMS` in `scan-runner/runner.py`). A lockfile from another ecosystem fails the
+    offline scan instead of passing.
+- On success a helper swaps the download into place and writes `/db/synced_at`; on failure the previous DB is kept.
+- Celery beat runs `vulndb.sync` at 01:00, an hour before the daily scans. Each outcome is audited (`vulndb.sync`).
+- Scans mount the DB volume read-only and run offline (`--offline` for OSV-Scanner; `--skip-db-update
+  --skip-check-update --offline-scan --cache-backend memory` for Trivy).
+- Staleness: before an OSV or Trivy scan, scan-runner reads `synced_at`. A missing DB or one older than 48 hours
+  **fails the scan** (stricter than the first design's `partial`, and simpler): never clean, never resolves findings.
 
-### 4.3 Files (when approved)
+### 4.3 Files
 
 `deploy/scan-proxy/squid.conf`, a `scan-proxy` service and `scan`/`egress` networks in
 `deploy/docker-compose.yml`, the two sync templates and proxy env in `scan-runner/runner.py`, DB volume mounts and
-offline flags in the OSV/Trivy templates, a beat schedule entry, the staleness rule in the scan service, tests for
-all of it, and a `scanner-live` CI step that runs Squid and proves a non-allowlisted host is refused.
+offline flags in the OSV/Trivy templates, the `vulndb.sync` beat task (`apps/api/app/scanners/vulndb.py`), the staleness rule
+in scan-runner, tests for all of it, and a `scanner-live` CI step that runs Squid and proves a non-allowlisted host is refused.
 
 ## 5. Image pinning
 

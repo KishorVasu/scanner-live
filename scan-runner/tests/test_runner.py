@@ -25,10 +25,12 @@ def req(**kw):
 
 def test_committed_lock_is_well_formed_and_unreviewed():
     imgs, _ = runner.load_lock()
-    assert set(imgs) == set(runner.TEMPLATES)
+    # Every scanner template has an entry; extra entries are tools used only by DB sync jobs.
+    assert set(imgs) == set(runner.TEMPLATES) | {s["image"] for s in runner.SYNC.values()}
     for name, img in imgs.items():
         assert img["digest"] is None or runner.DIGEST.fullmatch(img["digest"]), name
-    for name in imgs:
+        assert not img.get("reviewed_by"), name  # only a person sets this, after review
+    for name in runner.TEMPLATES:
         with pytest.raises(runner.RequestError, match="not pinned|not been reviewed"):
             runner.validate(req(scanner=name, **({"target": "requirements.txt"} if name == "pip_audit" else {})), imgs)
 
@@ -87,7 +89,8 @@ def test_sandbox_command():
         assert flag in joined
     assert f"type=volume,src=sp-src-{r.job_id},dst=/src,readonly" in argv
     assert f"registry.internal/mirror/pip_audit@{PINNED}" in argv
-    assert "--network" in argv and argv[argv.index("--network") + 1] == "sp-scan-egress"
+    assert "--network" in argv and argv[argv.index("--network") + 1] == "sp-scan"
+    assert "HTTPS_PROXY=http://scan-proxy:3128" in argv  # the internal network's only way out
     assert "/src/api/requirements.txt" in argv
     assert not any("docker.sock" in a or a == "--privileged" for a in argv)
 
@@ -108,9 +111,12 @@ def test_offline_scanners_get_no_network_and_npm_never_runs_scripts():
 class FakeDocker:
     """Records every docker argv; answers by the step it recognises."""
 
-    def __init__(self, *, src_exists=True, scan_rc=1, stdout=b"", report=b'{"results": []}', readback_rc=0):
+    def __init__(self, *, src_exists=True, scan_rc=1, stdout=b"", report=b'{"results": []}', readback_rc=0,
+                 synced_at=None, commit_rc=0):
+        import time
         self.calls, self.src_exists, self.scan_rc, self.stdout = [], src_exists, scan_rc, stdout
-        self.report, self.readback_rc = report, readback_rc
+        self.report, self.readback_rc, self.commit_rc = report, readback_rc, commit_rc
+        self.synced_at = str(int(time.time()) - 3600).encode() if synced_at is None else synced_at
 
     def __call__(self, argv, **kw):
         import subprocess
@@ -118,11 +124,25 @@ class FakeDocker:
         rc, out = 0, b""
         if argv[1:3] == ["volume", "inspect"]:
             rc = 0 if self.src_exists else 1
-        elif "head" in argv:
-            rc, out = self.readback_rc, self.report
-        elif any("@sha256:" in a for a in argv) and "chown" not in argv:
+        elif is_helper(argv):
+            if "head" in argv:
+                rc, out = self.readback_rc, self.report
+            elif "/db/synced_at" in argv:  # db_age_s
+                rc, out = (1, b"") if self.synced_at == b"" else (0, self.synced_at)
+            elif "sh" in argv:  # DB commit
+                rc = self.commit_rc
+        elif any("@sha256:" in a for a in argv):
             rc, out = self.scan_rc, self.stdout
         return subprocess.CompletedProcess(argv, rc, out, b"scanner stderr")
+
+
+def is_helper(argv):
+    return "128m" in argv
+
+
+def started(fake):
+    """Scanner or sync containers started (helpers excluded)."""
+    return [c for c in fake.calls if c[1:3] == ["run", "--rm"] and not is_helper(c)]
 
 
 def _run(monkeypatch, fake, scanner="osv_scanner", **kw):
@@ -173,9 +193,10 @@ def test_timeout_is_an_error_and_cleans_up(monkeypatch):
     import subprocess
 
     def slow(argv, **kw):
-        if any("@sha256:" in a for a in argv) and "chown" not in argv and "head" not in argv:
+        if argv[1:3] == ["run", "--rm"] and not is_helper(argv):
             raise subprocess.TimeoutExpired(argv, 900)
-        return subprocess.CompletedProcess(argv, 0, b"", b"")
+        out = str(int(__import__("time").time())).encode() if "/db/synced_at" in argv else b""
+        return subprocess.CompletedProcess(argv, 0, out, b"")
     calls = []
     monkeypatch.setattr(runner.subprocess, "run", lambda argv, **kw: (calls.append(argv), slow(argv, **kw))[1])
     out = runner.run(runner.validate(req(), images()), images(), None)
@@ -191,3 +212,67 @@ def test_unreviewed_helper_image_refuses_before_any_container(monkeypatch):
     out = runner.run(runner.validate(req(), imgs), imgs, None)
     assert "helper image" in out["error"]
     assert not any(any("@sha256:" in a for a in c) for c in fake.calls)
+
+
+# ---------- offline DBs, proxy and DB sync (fake docker) ----------
+
+def test_offline_scanners_mount_a_read_only_db_and_get_no_network():
+    for name, db in (("osv_scanner", "sp-vulndb-osv"), ("trivy", "sp-vulndb-trivy")):
+        imgs = images()
+        imgs[name] = {**imgs[name], "network": "none"}
+        a = runner.docker_argv(runner.validate(req(scanner=name), imgs), imgs, None)
+        assert f"type=volume,src={db},dst=/db,readonly" in a
+        assert a[a.index("--network") + 1] == "none" and not any(x.startswith("HTTPS_PROXY") for x in a)
+    t = runner.docker_argv(runner.validate(req(scanner="trivy"), images()), images(), None)
+    assert "--skip-db-update" in t and "--offline-scan" in t and "--skip-check-update" in t
+
+
+def test_committed_lock_puts_only_audit_tools_behind_the_proxy():
+    imgs, _ = runner.load_lock()
+    scanners_online = {k for k in runner.TEMPLATES if imgs[k].get("network") == "egress"}
+    assert scanners_online == {"npm_audit", "pip_audit"}  # sync jobs always use the proxy; no other scanner does
+
+
+@pytest.mark.parametrize("synced_at, msg", [(b"", "DB missing"), (b"not-a-number", "DB missing"),
+                                            (b"1000000000", "stale")])
+def test_missing_or_stale_db_fails_before_any_scan(monkeypatch, synced_at, msg):
+    fake = FakeDocker(synced_at=synced_at)
+    out = _run(monkeypatch, fake)
+    assert "report" not in out and msg in out["error"]
+    assert started(fake) == []
+    assert len(_removed(fake)) == 2
+
+
+def _sync(monkeypatch, fake, db="osv", imgs=None):
+    monkeypatch.setattr(runner.subprocess, "run", fake)
+    return runner.sync(db, imgs or images(), None)
+
+
+def test_sync_downloads_through_the_proxy_then_commits(monkeypatch):
+    fake = FakeDocker(scan_rc=0)
+    out = _sync(monkeypatch, fake)
+    assert out["ok"] is True
+    (job,) = started(fake)
+    assert job[job.index("--network") + 1] == "sp-scan" and "HTTPS_PROXY=http://scan-proxy:3128" in job
+    assert "type=volume,src=sp-vulndb-osv,dst=/db" in job and "--user" in job and "10001:10001" in job
+    urls = [a for a in job if a.startswith("https://")]
+    assert urls and all(u.startswith(runner.OSV_BUCKET + "/") for u in urls)
+    commit = next(c for c in fake.calls if is_helper(c) and "sh" in c)
+    assert "mv /db/incoming/osv-scanner /db/osv-scanner" in commit[-1] and "synced_at" in commit[-1]
+
+
+def test_failed_download_keeps_the_previous_db(monkeypatch):
+    fake = FakeDocker(scan_rc=22)
+    out = _sync(monkeypatch, fake, db="trivy")
+    assert out["ok"] is False and "previous DB kept" in out["error"]
+    assert not any(is_helper(c) and "sh" in c for c in fake.calls)  # no swap
+
+
+def test_sync_refuses_unreviewed_tool_image_and_unknown_db(monkeypatch):
+    imgs = images()
+    imgs["curl"] = {**imgs["curl"], "reviewed_by": None}
+    fake = FakeDocker(scan_rc=0)
+    out = _sync(monkeypatch, fake, imgs=imgs)
+    assert out["ok"] is False and "curl image is not pinned and reviewed" in out["error"]
+    assert started(fake) == []
+    assert runner.sync("../etc", images(), None) == {"ok": False, "error": "unknown DB"}

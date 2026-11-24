@@ -56,7 +56,7 @@ def test_every_long_running_service_has_limits_and_healthcheck():
 
 def test_data_networks_are_internal():
     for net in ("data", "scan-control", "app", "scan"):
-        assert re.search(rf"^  {net}: \{{ internal: true \}}", COMPOSE, re.MULTILINE), net
+        assert re.search(rf"^  {net}: \{{ internal: true[ ,]", COMPOSE, re.MULTILINE), net
     assert "ports:" not in _services()["postgres"] and "ports:" not in _services()["redis"]
 
 

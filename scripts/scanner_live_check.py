@@ -13,6 +13,7 @@ import string
 import subprocess
 import sys
 import tempfile
+import time
 import uuid
 from pathlib import Path
 
@@ -33,8 +34,7 @@ PLAN = {
     "npm_audit": (None, {"expect": "lodash"}),
     "pip_audit": ("requirements.txt", {"expect": "django", "image_ref": "sp-pip-audit:ci"}),
     "gitleaks": (None, {"expect": "github-pat"}),
-    # Expected to fail until the OQ-9 DB mirror exists: offline Trivy has no vulnerability DB yet.
-    "trivy": (None, {"expect_failure": "no vulnerability DB mirror yet (OQ-9)"}),
+    "trivy": (None, {"expect": "lodash"}),
     "semgrep": (None, {"expect": "subprocess-shell-true", "image_ref": "sp-semgrep:ci"}),
 }
 
@@ -106,14 +106,62 @@ def missing_source_is_an_error(images: dict) -> bool:
     return "report" not in out and "source volume missing" in (out.get("error") or "")
 
 
+SQUID = "ubuntu/squid:6.6-24.04_edge@sha256:d9c34c5ab74c6dd41cf1070d9b4221aac072e67e983527ca2d41512958f77506"
+
+
+def start_proxy() -> None:
+    """The same network layout and Squid flags as deploy/docker-compose.yml: `sp-scan` is internal, the proxy alone
+    also sits on `sp-scan-egress`."""
+    sh("docker", "network", "create", "--internal", runner.NETWORKS["egress"])
+    sh("docker", "network", "create", "sp-scan-egress")
+    sh("docker", "run", "-d", "--name", "scan-proxy", "--network", "sp-scan-egress", "--user", "13:13",
+       "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true",
+       *[x for d in ("/tmp", "/var/spool/squid", "/var/log/squid", "/run") for x in ("--tmpfs", d)],
+       "-v", f"{ROOT / 'deploy' / 'scan-proxy' / 'squid.conf'}:/etc/squid/squid.conf:ro",
+       "--entrypoint", "squid", SQUID, "-N", "-f", "/etc/squid/squid.conf")
+    sh("docker", "network", "connect", runner.NETWORKS["egress"], "scan-proxy")
+
+
+def egress_checks(images: dict) -> dict:
+    """From the scan network: allowlisted host via the proxy works; any other host, plain HTTP, or going direct
+    does not. Exit codes are recorded as evidence."""
+    curl = f"{images['curl']['image']}@{images['curl']['digest']}"
+
+    def probe(*args: str) -> int:
+        return sh("docker", "run", "--rm", "--network", runner.NETWORKS["egress"], "--read-only", "--cap-drop", "ALL",
+                  curl, "--silent", "--output", "/dev/null", "--max-time", "20", *args, check=False).returncode
+
+    for _ in range(30):  # wait for Squid
+        if (allowed := probe("--fail", "--proxy", runner.PROXY, "https://pypi.org/simple/")) == 0:
+            break
+        time.sleep(2)
+    return {
+        "allowlisted_via_proxy": allowed,
+        "other_host_via_proxy": probe("--fail", "--proxy", runner.PROXY, "https://example.com/"),
+        "plain_http_via_proxy": probe("--fail", "--proxy", runner.PROXY, "http://pypi.org/simple/"),
+        "direct_without_proxy": probe("--fail", "--noproxy", "*", "https://pypi.org/simple/"),
+    }
+
+
 def main() -> int:
     images, _ = runner.load_lock()
     # CI is the evidence step *before* human review, so the review gate is satisfied in memory only, never on disk.
     images = {k: {**v, "reviewed_by": "ci-scanner-live", "digest": v["digest"] or "sha256:" + "0" * 64}
               for k, v in images.items()}
-    sh("docker", "network", "create", runner.NETWORKS["egress"], check=False)
-    src, fake = fixture()
     results, failures = [], []
+    start_proxy()
+    egress = egress_checks(images)
+    results.append({"check": "egress", **egress})
+    if egress["allowlisted_via_proxy"] != 0:
+        failures.append(f"proxy: allowlisted host not reachable ({egress})")
+    if any(egress[k] == 0 for k in ("other_host_via_proxy", "plain_http_via_proxy", "direct_without_proxy")):
+        failures.append(f"proxy: traffic that must be refused got through ({egress})")
+    for db in runner.SYNC:
+        out = runner.sync(db, images, None)
+        results.append({"check": f"{db}_db_sync", **out})
+        if not out.get("ok"):
+            failures.append(f"{db} DB sync failed: {out.get('error')}")
+    src, fake = fixture()
     for scanner, (target, opts) in PLAN.items():
         try:
             r = run_one(scanner, src, images, target, opts, fake)

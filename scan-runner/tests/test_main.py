@@ -68,3 +68,28 @@ def test_invalid_request_is_refused_even_when_enabled(server, monkeypatch):
     monkeypatch.setattr(runner, "run", lambda *a, **k: pytest.fail("must not run"))
     code, _ = post(server, {**body(), "scanner": "bash"})
     assert code == 400
+
+
+def post_sync(url, body):
+    r = urllib.request.Request(url + "/sync", json.dumps(body).encode(), {"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(r) as resp:
+            return resp.status, json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        return e.code, json.loads(e.read())
+
+
+@pytest.mark.parametrize("bad", [{}, {"db": "../x"}, {"db": "osv", "url": "https://evil.example"}, ["osv"]])
+def test_sync_accepts_only_a_known_db_name(server, monkeypatch, bad):
+    monkeypatch.setenv("SP_RUNNER_EXECUTE", "1")
+    monkeypatch.setattr(runner, "sync", lambda *a, **k: pytest.fail("must not run"))
+    assert post_sync(server, bad)[0] == 400
+
+
+def test_sync_respects_the_switch_and_strips_stderr(server, monkeypatch):
+    monkeypatch.delenv("SP_RUNNER_EXECUTE", raising=False)
+    monkeypatch.setattr(runner, "sync", lambda *a, **k: pytest.fail("must not run"))
+    assert post_sync(server, {"db": "osv"})[0] == 501
+    monkeypatch.setenv("SP_RUNNER_EXECUTE", "1")
+    monkeypatch.setattr(runner, "sync", lambda *a, **k: {"ok": True, "exit_code": 0, "stderr_tail": "x"})
+    assert post_sync(server, {"db": "trivy"}) == (200, {"ok": True, "exit_code": 0})

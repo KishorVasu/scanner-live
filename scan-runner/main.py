@@ -25,19 +25,25 @@ class Handler(BaseHTTPRequestHandler):
         self._send(200, {"status": "ok"}) if self.path == "/health" else self._send(404, {"error": "not found"})
 
     def do_POST(self) -> None:
-        if self.path != "/scan":
+        if self.path not in ("/scan", "/sync"):
             return self._send(404, {"error": "not found"})
         length = int(self.headers.get("Content-Length") or 0)
         if length <= 0 or length > MAX_BODY:
             return self._send(413, {"error": "bad body size"})
         try:
             images, registry = runner.load_lock(Path(os.environ.get("SP_IMAGES_LOCK", runner.LOCK_PATH)))
-            req = runner.validate(json.loads(self.rfile.read(length)), images)
+            body = json.loads(self.rfile.read(length))
+            if self.path == "/sync":  # {"db": "osv" | "trivy"}, nothing else
+                if not isinstance(body, dict) or set(body) != {"db"} or body["db"] not in runner.SYNC:
+                    raise runner.RequestError("body must be {\"db\": \"osv\" | \"trivy\"}")
+            else:
+                req = runner.validate(body, images)
         except (ValueError, runner.RequestError) as e:
             return self._send(400, {"error": str(e)})
         if os.environ.get("SP_RUNNER_EXECUTE") != "1":
-            return self._send(501, {"error": "execution disabled", "argv": runner.docker_argv(req, images, registry)})
-        result = runner.run(req, images, registry)
+            argv = None if self.path == "/sync" else runner.docker_argv(req, images, registry)
+            return self._send(501, {"error": "execution disabled", "argv": argv})
+        result = runner.sync(body["db"], images, registry) if self.path == "/sync" else runner.run(req, images, registry)
         result.pop("stderr_tail", None)  # untrusted scanner output never leaves scan-runner
         self._send(200, result)
 

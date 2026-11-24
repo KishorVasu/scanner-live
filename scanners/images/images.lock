@@ -4,7 +4,8 @@
   "images": {
     "osv_scanner": {"image": "ghcr.io/google/osv-scanner", "version": "v2.7.1",
                     "digest": "sha256:a70ffffc2bfd33482953e5d6b64c6fcdb30239717a07b0f0d3ab2859ce3e4cde",
-                    "network": "egress", "reviewed_by": null},
+                    "network": "none", "reviewed_by": null,
+                    "note": "scans offline against the sp-vulndb-osv volume, refreshed daily by the curl sync job"},
     "npm_audit": {"image": "node", "version": "22-alpine",
                   "digest": "sha256:1314fb30ec37592d5845e5a160d522c0e680972aa534549940b8d73bde88481a",
                   "network": "egress", "reviewed_by": null},
@@ -20,6 +21,10 @@
     "trivy": {"image": "aquasec/trivy", "version": "0.76.2",
               "digest": "sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb",
               "network": "none", "reviewed_by": null,
-              "note": "offline scan needs a vulnerability DB mirror (OQ-9); misconfiguration checks work offline"}
+              "note": "scans offline against the sp-vulndb-trivy volume; the same image refreshes it daily through scan-proxy (OQ-9)"},
+    "curl": {"image": "curlimages/curl", "version": "8.23.0",
+             "digest": "sha256:3fb7e13e5d179a845c97d78204f3f1064d1907037f26a3ebf91710571151fd93",
+             "network": "egress", "reviewed_by": null,
+             "note": "not a scanner: downloads the OSV offline DB zips through scan-proxy (osv sync job only)"}
   }
 }

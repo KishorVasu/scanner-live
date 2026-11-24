@@ -163,7 +163,7 @@ security-platform/
 | OQ-6 | Do any client contracts forbid sending redacted findings to an external LLM? | `llm_allowed = true` default; per-project override. |
 | OQ-7 | Load the 19 November GitHub incident and the MERN server compromise as first incident records? | Yes, as tuning input for integrity checks, once evidence is supplied. |
 | OQ-8 | Approve the three proposed changes: Grafana/OTel to Phase 6; in-house orchestrator instead of Claude Agent SDK; Semgrep CE default with Opengrep fallback. | Treated as approved in these docs. |
-| OQ-9 | Scanner egress enforcement: allowlisting forward proxy (new component), host firewall, or offline DBs? | **Decided 2026-11-24:** offline DBs for OSV/Trivy + allowlisting forward proxy for npm/pip audit (new component approved; design before build). |
+| OQ-9 | Scanner egress enforcement: allowlisting forward proxy (new component), host firewall, or offline DBs? | **Decided 2026-11-24:** offline DBs for OSV/Trivy + allowlisting forward proxy for npm/pip audit (new component approved). Built 2026-11-24 with Squid; see `SCANNING_STRATEGY.md` §4. |
 | OQ-10 | Approve the library list in Phase 1. | Pending. |
 | OQ-11 | Approve the six supporting tables in `DATABASE_SCHEMA.md` §7. | Pending. |
 | OQ-12 | Local agent: dev machine is Windows. Keep macOS/Linux first and run boundary tests in Linux CI? | Yes. |

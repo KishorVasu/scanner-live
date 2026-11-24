@@ -20,6 +20,8 @@ celery.conf.update(
     worker_prefetch_multiplier=1,
     beat_schedule={
         "expire-approvals": {"task": "approvals.expire", "schedule": 300.0},
+        # Offline vulnerability DBs first, so the 02:00 scans read a fresh copy.
+        "vulndb-sync": {"task": "vulndb.sync", "schedule": crontab(hour=1, minute=0)},
         "daily-scans": {"task": "scans.plan", "schedule": crontab(hour=2, minute=0), "args": ["daily"]},
         "weekly-scans": {"task": "scans.plan", "schedule": crontab(hour=3, minute=0, day_of_week="sun"), "args": ["weekly"]},
     },
@@ -57,6 +59,20 @@ def scans_plan(cadence: str) -> int:
         try:
             async with get_sessionmaker()() as db:
                 return await plan(db, cadence)
+        finally:
+            await get_engine().dispose()
+
+    return asyncio.run(run())
+
+
+@celery.task(name="vulndb.sync", time_limit=1900, soft_time_limit=1840)
+def vulndb_sync() -> dict:
+    from app.scanners.vulndb import sync_all
+
+    async def run() -> dict:
+        try:
+            async with get_sessionmaker()() as db:
+                return await sync_all(db)
         finally:
             await get_engine().dispose()
 
