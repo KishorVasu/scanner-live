@@ -138,11 +138,16 @@ Forbidden action names registered as explicit deny policies: `edit_file`, `write
 - **Approval required for:** nothing. A high-severity event can open an incident (sets project status; incident actions need approval).
 
 ### 5.6 Security Research (Phase 4)
-- **Purpose:** Ingest and normalise advisories from allowlisted sources; write a plain-language summary separate from vendor facts.
+- **Purpose:** Explain one advisory in plain language and extract its extra conditions, separate from vendor facts.
+- **Built 2026-11-24.** Fetching and normalising moved out of the agent into deterministic code
+  (`app/intel/service.py`: OSV querybatch for every inventory version, CISA KEV, NVD CVSS; allowlisted hosts enforced
+  in code). OSV carries GHSA records for the covered ecosystems, so there is no separate GHSA fetch; vendor feeds are
+  not added yet. The agent only reads one stored advisory and writes its interpretation.
 - **Uses Claude:** Yes (summary and condition extraction).
-- **Input:** `source_id`, `since`.
-- **Output:** advisories with `vendor_facts` and `ai_interpretation` as separate fields; extracted extra conditions with citations.
-- **Tools:** `fetch_osv`, `fetch_ghsa`, `fetch_nvd`, `fetch_cisa_kev`, `fetch_vendor_feed`, `submit_result`.
+- **Input:** `advisory_id`.
+- **Output:** `ai_interpretation` and `extra_conditions`; each condition carries a quote that must appear verbatim in
+  `vendor_facts` or `record_interpretation` rejects the answer.
+- **Tools:** `read_advisory`, `record_interpretation`.
 - **Writes:** `security_advisories`.
 - **Timeout / retries:** 600 s / 3.
 - **Approval required for:** nothing.
@@ -152,7 +157,10 @@ Forbidden action names registered as explicit deny policies: `edit_file`, `write
 - **Uses Claude:** Yes (reasoning over redacted evidence).
 - **Input:** `advisory_id`, `repository_id`.
 - **Output:** `classification` (`confirmed_affected`, `potentially_affected`, `not_affected_on_evidence`, `needs_verification`, `not_scanned`), `reasoning`, `evidence[]`, `references[]`, optional rescan request.
-- **Tools:** `query_inventory`, `read_finding`, `request_targeted_scan`, `submit_result`.
+- **Tools:** `query_inventory`, `read_finding`, `record_impact`, `request_targeted_scan`. `record_impact` recomputes
+  the permitted classifications from the database and rejects unknown evidence or source IDs. The LLM is called only
+  when the rules permit more than one classification (the advisory has extra conditions), never for a project with
+  `llm_allowed = false` (the gateway refuses it too), and its failure or rejection falls back to the rule.
 - **Writes:** `project_impacts`.
 - **Rules:** Never `confirmed_affected` on framework name/version alone when the advisory has extra conditions. Never `not_affected_on_evidence` when inventory is incomplete or stale; use `not_scanned` / `needs_verification`. Deterministic pre-checks enforce both before the LLM result is accepted.
 - **Timeout / retries:** 300 s / 2.

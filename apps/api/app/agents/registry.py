@@ -24,6 +24,9 @@ class ToolContext:
 
     session: AsyncSession
     run_id: object
+    # A tool that returns data from a project with llm_allowed = false calls this; the gateway then refuses every
+    # later LLM call in the run (OQ-6), whatever the handler does.
+    deny_llm: Callable[[], None] = lambda: None
 
 
 ToolFn = Callable[[ToolContext, BaseModel], Awaitable[BaseModel]]

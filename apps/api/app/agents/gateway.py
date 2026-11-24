@@ -42,6 +42,7 @@ class RunState:
     tool_calls: int = 0
     tokens_in: int = 0
     tokens_out: int = 0
+    llm_denied: bool = False  # set by tools that touched data from a project with llm_allowed = false
 
 
 class ToolGateway:
@@ -98,7 +99,8 @@ class ToolGateway:
         await st.session.commit()  # approval marked executed and lock released before the tool runs
         try:
             async with st.session.begin_nested():  # tool writes roll back on error
-                result = await tool.fn(ToolContext(session=st.session, run_id=st.run_id), parsed)
+                ctx = ToolContext(session=st.session, run_id=st.run_id, deny_llm=lambda: setattr(st, "llm_denied", True))
+                result = await tool.fn(ctx, parsed)
                 out = tool.output_model.model_validate(result, from_attributes=True).model_dump(mode="json")
         except Exception as e:
             self._audit(st, "gateway.tool_result", "error", tool_name, {"error": type(e).__name__})
@@ -116,6 +118,8 @@ class ToolGateway:
     async def llm_complete(self, st: RunState, request: dict[str, Any]) -> dict[str, Any]:
         if not st.spec.uses_llm:
             raise await self._deny(st, "llm", "agent spec does not allow LLM use")
+        if st.llm_denied:
+            raise await self._deny(st, "llm", "run read data from a project with llm_allowed = false")
         if self._llm is None:
             raise await self._deny(st, "llm", "no LLM provider configured")
         safe = self._redactor.redact_obj(request)  # rule R4: nothing leaves unredacted

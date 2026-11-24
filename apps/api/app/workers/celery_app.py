@@ -22,6 +22,8 @@ celery.conf.update(
         "expire-approvals": {"task": "approvals.expire", "schedule": 300.0},
         # Offline vulnerability DBs first, so the 02:00 scans read a fresh copy.
         "vulndb-sync": {"task": "vulndb.sync", "schedule": crontab(hour=1, minute=0)},
+        # Advisory ingestion and impact analysis (Phase 4), before the daily scans.
+        "intel-daily": {"task": "intel.run", "schedule": crontab(hour=0, minute=30)},
         "daily-scans": {"task": "scans.plan", "schedule": crontab(hour=2, minute=0), "args": ["daily"]},
         "weekly-scans": {"task": "scans.plan", "schedule": crontab(hour=3, minute=0, day_of_week="sun"), "args": ["weekly"]},
     },
@@ -63,6 +65,13 @@ def scans_plan(cadence: str) -> int:
             await get_engine().dispose()
 
     return asyncio.run(run())
+
+
+@celery.task(name="intel.run", time_limit=3600, soft_time_limit=3540)
+def intel_run() -> dict:
+    from app.agents.intel import run_pipeline_sync
+
+    return run_pipeline_sync()
 
 
 @celery.task(name="vulndb.sync", time_limit=1900, soft_time_limit=1840)

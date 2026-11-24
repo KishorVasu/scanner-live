@@ -19,12 +19,13 @@ unit and DB tests (embedded Postgres), no containers. Container work is verified
 | --- | --- | --- | --- |
 | `caddy` | public, app | 443, 80 | TLS (automatic ACME or internal CA), security headers, rate limit on `/api/webhooks/*` and `/api/agents/*`. |
 | `web` | app | none | Next.js production server. Talks only to `api`. |
-| `api` | app, data | none | FastAPI (Uvicorn). |
-| `worker` | data, scan-control | none | Celery worker. Calls scan-runner; never touches the Docker socket. Needs egress to the Anthropic API, GitHub API and allowlisted advisory feeds (see §4). |
+| `api` | app, data, fetch | none | FastAPI (Uvicorn). |
+| `worker` | data, scan-control, fetch | none | Celery worker. Calls scan-runner; never touches the Docker socket. Needs egress to the Anthropic API, GitHub API and allowlisted advisory feeds (see §4). |
 | `beat` | data | none | Celery beat. Schedules only. |
 | `scan-runner` | scan-control | none | Only service with access to the container runtime. Accepts only allowlisted digests and fixed templates. |
 | `postgres` | data | none | Daily encrypted backup. |
 | `redis` | data | none | Password-protected; `protected-mode yes`; no persistence of secrets. |
+| `fetch-proxy` | fetch, fetch-egress | none | Squid allowlisting forward proxy, the only egress for `api` and `worker` (§4). Unprivileged (uid 13), read-only. |
 | `scan-proxy` | scan, scan-egress | none | Squid allowlisting forward proxy, the only egress for scanner and DB-sync containers (`SCANNING_STRATEGY.md` §4.1). Unprivileged (uid 13), read-only. |
 | scanner containers | `scan` (or none) | none | Created per job by scan-runner, deleted after. |
 
@@ -33,6 +34,8 @@ unit and DB tests (embedded Postgres), no containers. Container work is verified
 | Network | Members | Purpose |
 | --- | --- | --- |
 | `public` | caddy | Ingress only. |
+| `fetch` | api, worker, fetch-proxy | `internal: true`; the only way out is `fetch-proxy` (§4). |
+| `fetch-egress` | fetch-proxy | Outbound for fetch-proxy alone. |
 | `app` | caddy, web, api | HTTP between proxy, dashboard and API. |
 | `data` | api, worker, beat, postgres, redis | `internal: true`; no published ports. |
 | `scan-control` | worker, scan-runner | `internal: true`; job requests and report return. |
@@ -41,7 +44,11 @@ unit and DB tests (embedded Postgres), no containers. Container work is verified
 
 ## 4. Egress
 
-`worker` needs outbound HTTPS to: `api.anthropic.com`, `api.github.com`, and the advisory hosts in `advisory_sources`. Enforce with a host firewall egress policy for the worker's network, or route through the same allowlisting proxy chosen in OQ-9. `api` needs outbound HTTPS only to `api.github.com` (installation token minting). No other service needs egress.
+`api` and `worker` sit on the internal `fetch` network; their only way out is `fetch-proxy` (Squid,
+`deploy/fetch-proxy/squid.conf`), which allows HTTPS to `api.osv.dev`, `www.cisa.gov`, `services.nvd.nist.gov`,
+`api.github.com` and `api.anthropic.com` only (Phase 4 decision 1, 2026-11-24). Scanner and DB-sync containers use the
+separate `scan-proxy` (`SCANNING_STRATEGY.md` §4). No other service has egress. Advisory fetch code also enforces its
+host allowlist itself (`app/intel/sources.py`).
 
 ## 5. Container hardening (all services)
 

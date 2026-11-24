@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 import app.db.registry  # noqa: F401  (registers Phase 2 tables on the metadata)
 import app.db.scanning  # noqa: F401  (Phase 3)
+import app.db.intel  # noqa: F401  (Phase 4)
 from app.db.models import Base
 
 target_metadata = Base.metadata

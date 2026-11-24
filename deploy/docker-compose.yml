@@ -19,6 +19,11 @@ x-api-env: &api-env
   SP_REDIS_PASSWORD_FILE: /run/secrets/redis_password
   SP_MASTER_KEY_FILE: /run/secrets/master_key
   SP_REDACTION_SALT_FILE: /run/secrets/redaction_salt
+  SP_ANTHROPIC_API_KEY_FILE: /run/secrets/anthropic_api_key
+  # All outbound HTTPS goes through fetch-proxy's allowlist; internal services are reached directly.
+  HTTPS_PROXY: http://fetch-proxy:3128
+  HTTP_PROXY: http://fetch-proxy:3128
+  NO_PROXY: scan-runner,localhost,127.0.0.1
 
 services:
   caddy:
@@ -53,7 +58,7 @@ services:
     build: { context: .., dockerfile: apps/api/Dockerfile }
     environment: *api-env
     secrets: [pg_app_password, master_key, redaction_salt, redis_password]
-    networks: [app, data, egress]
+    networks: [app, data, fetch]
     depends_on:
       postgres: { condition: service_healthy }
       migrate: { condition: service_completed_successfully }
@@ -79,8 +84,8 @@ services:
     build: { context: .., dockerfile: apps/api/Dockerfile }
     command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=INFO", "--concurrency=2"]
     environment: *api-env
-    secrets: [pg_app_password, master_key, redaction_salt, redis_password]
-    networks: [data, scan-control, egress]
+    secrets: [pg_app_password, master_key, redaction_salt, redis_password, anthropic_api_key]
+    networks: [data, scan-control, fetch]
     depends_on:
       redis: { condition: service_healthy }
       migrate: { condition: service_completed_successfully }
@@ -110,6 +115,21 @@ services:
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8080/health')"]
       interval: 30s
+    deploy: { resources: { limits: { cpus: "0.5", memory: 256m, pids: 100 } } }
+
+  # Allowlisting forward proxy for api and worker: advisory feeds, GitHub API, Anthropic API (Phase 4 decision 1).
+  fetch-proxy:
+    <<: *hardening
+    image: ubuntu/squid:6.6-24.04_edge@sha256:d9c34c5ab74c6dd41cf1070d9b4221aac072e67e983527ca2d41512958f77506
+    user: "13:13"
+    entrypoint: ["squid", "-N", "-f", "/etc/squid/squid.conf"]
+    tmpfs: ["/tmp", "/var/spool/squid", "/var/log/squid", "/run"]
+    volumes:
+      - ./fetch-proxy/squid.conf:/etc/squid/squid.conf:ro
+    networks: [fetch, fetch-egress]
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/3128"]
+      interval: 60s
     deploy: { resources: { limits: { cpus: "0.5", memory: 256m, pids: 100 } } }
 
   # Allowlisting forward proxy: the only egress for scanner and DB-sync containers (docs/SCANNING_STRATEGY.md §4.1).
@@ -167,9 +187,10 @@ networks:
   app: { internal: true }
   data: { internal: true }
   scan-control: { internal: true }
-  # Outbound HTTPS for api (GitHub) and worker (Anthropic, GitHub, advisory feeds). Host firewall restricts
-  # destinations (docs/SELF_HOSTED_DEPLOYMENT.md §4, OQ-9).
-  egress: {}
+  # api and worker reach the internet only through fetch-proxy (deploy/fetch-proxy/squid.conf allowlist).
+  fetch: { internal: true }
+  # Outbound for fetch-proxy alone.
+  fetch-egress: {}
   # Scanner and DB-sync containers (started by scan-runner by network name, hence fixed names). Internal: the only
   # way out is scan-proxy.
   scan: { internal: true, name: sp-scan }
@@ -191,3 +212,4 @@ secrets:
   master_key: { file: ./secrets/master_key }
   redaction_salt: { file: ./secrets/redaction_salt }
   redis_password: { file: ./secrets/redis_password }
+  anthropic_api_key: { file: ./secrets/anthropic_api_key }

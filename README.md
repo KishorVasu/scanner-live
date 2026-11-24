@@ -2,7 +2,7 @@
 
 Self-hosted security monitoring for the company's projects. Read-only by design. Rules: [CLAUDE.md](CLAUDE.md). Design: [docs/](docs/).
 
-Status: Phase 3 (Scanning), Docker-free parts built; awaiting Docker for live scans.
+Status: Phase 3 (Scanning) approved; live scanner behaviour is verified in CI (`scanner-live`). Phase 4 (Intelligence) is being planned.
 
 ## Layout
 

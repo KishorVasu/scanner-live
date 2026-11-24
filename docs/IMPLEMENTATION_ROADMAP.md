@@ -87,14 +87,23 @@ Hard constraint: no external project repository is touched in Phases 0–2 beyon
 
 **Scope:** scan-runner with image allowlist and fixed templates; pinned images and `images.lock`; adapters for OSV-Scanner, npm audit, pip-audit, Gitleaks, Semgrep, Trivy (CodeQL behind licence flag); integrity checks; findings with fingerprints and evidence history; scheduling and dedup; failure semantics.
 
+**Approved 2026-11-24** with two carried items (tracked until done):
+
 **Exit criteria:**
-- [ ] Every scanner runs on safe fixtures and on the pilots; findings stored with fingerprints.
-- [ ] Failed / partial / skipped scans never close findings (tests).
-- [ ] Integrity checks detect each synthetic fixture case.
-- [ ] Secret findings contain no secret values anywhere (test).
-- [ ] Sandbox profile verified: read-only mount, non-root, no network unless allowlisted, container removed.
+- [ ] Every scanner runs on safe fixtures *(done: CI `scanner-live`)* and on the pilots *(carried: needs the GitHub org,
+  the 3 pilot names and `reviewed_by` in `images.lock`)*; findings stored with fingerprints.
+- [x] Failed / partial / skipped scans never close findings (tests).
+- [x] Integrity checks detect each synthetic fixture case.
+- [x] Secret findings contain no secret values anywhere (test).
+- [x] Sandbox profile verified: read-only mount, non-root, no network unless allowlisted, container removed.
+- Carried: source fetch into `sp-src-<job>` (GitHub App and local agent), blocked on OQ-2.
 
 ## Phase 4 — Intelligence
+
+**Plan approved 2026-11-24** with these decisions: worker egress through a second Squid allowlist (`fetch-proxy`); the
+Anthropic API key in `deploy/secrets/anthropic_api_key` (an empty file disables LLM steps); no NVD API key; OSV does the
+version-range matching (no in-house range evaluators). Model: `claude-opus-5-5`, effort `medium`, server-side refusal
+fallback on; JSON output only, the model gets no tools.
 
 **Scope:** advisory ingestion (OSV, GHSA, NVD, CISA KEV, vendor feeds; allowlisted); deterministic inventory matching; Security Research and Impact Analysis agents on the Messages API; targeted rescans; impact matrix.
 

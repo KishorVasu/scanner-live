@@ -41,6 +41,12 @@ class Settings(BaseSettings):
     report_dir: Path | None = None  # redacted raw reports; None keeps only the parsed result
     scan_runner_url: str = "http://scan-runner:8080"
 
+    # Intelligence (Phase 4). The key file is mounted on the server; without it LLM steps are refused and the
+    # deterministic rules decide alone.
+    anthropic_api_key_file: Path | None = None
+    llm_model: str = "claude-opus-5-5"
+    llm_effort: str = "medium"
+
     # Local agents
     agent_enrolment_hours: int = 24
     agent_session_minutes: int = 15
