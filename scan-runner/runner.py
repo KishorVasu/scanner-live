@@ -25,7 +25,9 @@ TEMPLATES: dict[str, dict] = {
                   "report": "stdout", "workdir_target": True,
                   "env": {"HOME": "/tmp", "npm_config_cache": "/tmp/.npm", "npm_config_update_notifier": "false"}},
     "pip_audit": {"argv": ["pip-audit", "--requirement", "/src/{target}", "--no-deps", "--disable-pip", "--format", "json",
-                           "--output", "/report/report.json"], "report": "file", "target_required": True},
+                           "--output", "/report/report.json"], "report": "file", "target_required": True,
+                  # Root fs is read-only and uid 10001 has no home; pip-audit's cache must live on the /tmp tmpfs.
+                  "env": {"HOME": "/tmp", "XDG_CACHE_HOME": "/tmp/.cache"}},
     "gitleaks": {"argv": ["git", "--redact", "--report-format", "json", "--report-path", "/report/report.json",
                           "--exit-code", "1", "/src"], "report": "file",
                  # The source volume is owned by another uid; let git read it (read-only mount, nothing executes).
