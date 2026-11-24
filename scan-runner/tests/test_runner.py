@@ -258,7 +258,8 @@ def test_sync_downloads_through_the_proxy_then_commits(monkeypatch):
     urls = [a for a in job if a.startswith("https://")]
     assert urls and all(u.startswith(runner.OSV_BUCKET + "/") for u in urls)
     commit = next(c for c in fake.calls if is_helper(c) and "sh" in c)
-    assert "mv /db/incoming/osv-scanner /db/osv-scanner" in commit[-1] and "synced_at" in commit[-1]
+    assert "mv /db/incoming/osv-scalibr /db/osv-scalibr" in commit[-1] and "synced_at" in commit[-1]
+    assert all("/db/incoming/osv-scalibr/" in job[i - 1] for i, a in enumerate(job) if a.startswith("https://"))
 
 
 def test_failed_download_keeps_the_previous_db(monkeypatch):

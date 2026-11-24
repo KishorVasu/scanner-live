@@ -32,7 +32,7 @@ OSV_BUCKET = "https://osv-vulnerabilities.storage.googleapis.com"
 # Fixed argument templates. `{target}` is the only substitution, and only where listed.
 TEMPLATES: dict[str, dict] = {
     "osv_scanner": {"argv": ["scan", "source", "--recursive", "--offline", "--format", "json",
-                             "--output", "/report/report.json", "/src"], "report": "file", "db": "osv",
+                             "--output-file", "/report/report.json", "/src"], "report": "file", "db": "osv",
                     "env": {"OSV_SCANNER_LOCAL_DB_CACHE_DIRECTORY": "/db"}},
     "npm_audit": {"argv": ["npm", "audit", "--package-lock-only", "--json", "--ignore-scripts"],
                   "report": "stdout", "workdir_target": True,
@@ -61,12 +61,14 @@ SYNC: dict[str, dict] = {
             "argv": ["curl", "--fail", "--silent", "--show-error", "--proto", "=https", "--proto-redir", "=https",
                      "--retry", "3", "--create-dirs",
                      *[x for e in OSV_ECOSYSTEMS
-                       for x in ("-o", f"/db/incoming/osv-scanner/{e}/all.zip", f"{OSV_BUCKET}/{e}/all.zip")]],
-            "commit": "osv-scanner"},
+                       for x in ("-o", f"/db/incoming/osv-scalibr/{e}/all.zip", f"{OSV_BUCKET}/{e}/all.zip")]],
+            # osv-scanner v2 reads <OSV_SCANNER_LOCAL_DB_CACHE_DIRECTORY>/osv-scalibr/<ecosystem>/all.zip (CI run 7).
+            "commit": "osv-scalibr"},
     "trivy": {"image": "trivy",
               "argv": ["image", "--download-db-only", "--cache-dir", "/db/incoming",
                        "--db-repository", "ghcr.io/aquasecurity/trivy-db:2"],
-              "env": {"HOME": "/tmp"}, "commit": "db"},
+              # The DB unpacks to ~700 MB: far past the 256 MB /tmp tmpfs, so Trivy's temp files go on the volume.
+              "env": {"HOME": "/tmp", "TMPDIR": "/db/incoming/tmp"}, "commit": "db"},
 }
 LIMITS = {"memory": "2g", "cpus": "1", "pids": "256", "timeout_s": 900}
 MAX_REPORT_BYTES = 64 * 1024 * 1024  # same cap as the API's adapters (apps/api/app/scanners/base.py)
@@ -277,6 +279,7 @@ def sync(db: str, images: dict, registry: str | None, image_ref: str | None = No
         if _docker(_helper(images, registry, job, vol, ["chown", "10001:10001", "/db"], chown=True)).returncode != 0:
             return {"ok": False, "error": "could not prepare the DB volume"}
         _docker(_helper(images, registry, job, vol, ["rm", "-rf", "/db/incoming"]))
+        _docker(_helper(images, registry, job, vol, ["mkdir", "-p", "/db/incoming/tmp"]))
         proc = _docker(sync_argv(db, images, registry, job, image_ref), timeout=LIMITS["timeout_s"])
         tail = {"exit_code": proc.returncode, "stderr_tail": proc.stderr.decode("utf-8", "replace")[-1500:]}
         if proc.returncode != 0:
