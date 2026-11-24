@@ -1,7 +1,7 @@
 """scan-runner HTTP service (internal `scan-control` network only).
 
 POST /scan validates the request against images.lock and the fixed templates. Execution is off unless
-SP_RUNNER_EXECUTE=1 (it needs a container runtime, which Phase 3 adds once Docker is available on the host).
+SP_RUNNER_EXECUTE=1 (needs a container runtime and the Docker socket, which only this service gets: rule R8).
 """
 
 import json
@@ -37,7 +37,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(400, {"error": str(e)})
         if os.environ.get("SP_RUNNER_EXECUTE") != "1":
             return self._send(501, {"error": "execution disabled", "argv": runner.docker_argv(req, images, registry)})
-        self._send(200, runner.run(req, images, registry))
+        result = runner.run(req, images, registry)
+        result.pop("stderr_tail", None)  # untrusted scanner output never leaves scan-runner
+        self._send(200, result)
 
     def log_message(self, fmt: str, *args) -> None:
         print(json.dumps({"msg": fmt % args}))

@@ -101,3 +101,93 @@ def test_offline_scanners_get_no_network_and_npm_never_runs_scripts():
     scanner_args = n[next(i for i, a in enumerate(n) if "@sha256:" in a) + 1:]  # what runs inside the container
     assert scanner_args[:2] == ["npm", "audit"]
     assert not any(a in ("install", "ci", "run", "run-script", "exec") for a in scanner_args)
+
+
+# ---------- run(): prepare, scan, readback, cleanup (fake docker; no container runtime needed) ----------
+
+class FakeDocker:
+    """Records every docker argv; answers by the step it recognises."""
+
+    def __init__(self, *, src_exists=True, scan_rc=1, stdout=b"", report=b'{"results": []}', readback_rc=0):
+        self.calls, self.src_exists, self.scan_rc, self.stdout = [], src_exists, scan_rc, stdout
+        self.report, self.readback_rc = report, readback_rc
+
+    def __call__(self, argv, **kw):
+        import subprocess
+        self.calls.append(argv)
+        rc, out = 0, b""
+        if argv[1:3] == ["volume", "inspect"]:
+            rc = 0 if self.src_exists else 1
+        elif "head" in argv:
+            rc, out = self.readback_rc, self.report
+        elif any("@sha256:" in a for a in argv) and "chown" not in argv:
+            rc, out = self.scan_rc, self.stdout
+        return subprocess.CompletedProcess(argv, rc, out, b"scanner stderr")
+
+
+def _run(monkeypatch, fake, scanner="osv_scanner", **kw):
+    monkeypatch.setattr(runner.subprocess, "run", fake)
+    return runner.run(runner.validate(req(scanner=scanner, **kw), images()), images(), None)
+
+
+def _removed(fake):
+    return {c[-1] for c in fake.calls if c[1:3] == ["volume", "rm"]}
+
+
+def test_file_report_is_read_back_and_volumes_removed(monkeypatch):
+    fake = FakeDocker()
+    out = _run(monkeypatch, fake)
+    assert out["exit_code"] == 1 and out["report"] == '{"results": []}'
+    prepare = next(c for c in fake.calls if "chown" in c)
+    assert prepare[prepare.index("--cap-add") + 1] == "CHOWN" and "--network" in prepare
+    readback = next(c for c in fake.calls if "head" in c)
+    assert readback[readback.index("--user") + 1] == "10001:10001"
+    assert any(a.endswith(",readonly") and "sp-report-" in a for a in readback)
+    assert str(runner.MAX_REPORT_BYTES + 1) in readback
+    job = fake.calls[0][-1].removeprefix("sp-src-")
+    assert _removed(fake) == {f"sp-src-{job}", f"sp-report-{job}"}
+
+
+def test_stdout_report_needs_no_readback(monkeypatch):
+    fake = FakeDocker(stdout=b'{"auditReportVersion": 2}')
+    out = _run(monkeypatch, fake, scanner="npm_audit", target="web")
+    assert out["report"] == '{"auditReportVersion": 2}'
+    assert not any("head" in c for c in fake.calls)
+
+
+def test_missing_source_volume_is_an_error_not_an_empty_scan(monkeypatch):
+    fake = FakeDocker(src_exists=False)
+    out = _run(monkeypatch, fake)
+    assert "report" not in out and "source volume missing" in out["error"]
+    assert not any(any("@sha256:" in a for a in c) for c in fake.calls)  # no container started
+    assert len(_removed(fake)) == 2
+
+
+def test_missing_or_oversized_report_is_an_error(monkeypatch):
+    assert "no report" in _run(monkeypatch, FakeDocker(readback_rc=1))["error"]
+    big = FakeDocker(report=b"x" * (runner.MAX_REPORT_BYTES + 1))
+    assert _run(monkeypatch, big)["error"] == "report too large"
+
+
+def test_timeout_is_an_error_and_cleans_up(monkeypatch):
+    import subprocess
+
+    def slow(argv, **kw):
+        if any("@sha256:" in a for a in argv) and "chown" not in argv and "head" not in argv:
+            raise subprocess.TimeoutExpired(argv, 900)
+        return subprocess.CompletedProcess(argv, 0, b"", b"")
+    calls = []
+    monkeypatch.setattr(runner.subprocess, "run", lambda argv, **kw: (calls.append(argv), slow(argv, **kw))[1])
+    out = runner.run(runner.validate(req(), images()), images(), None)
+    assert out == {"exit_code": None, "error": "timeout"}
+    assert any(c[1:3] == ["rm", "-f"] for c in calls) and sum(c[1:3] == ["volume", "rm"] for c in calls) == 2
+
+
+def test_unreviewed_helper_image_refuses_before_any_container(monkeypatch):
+    imgs = images()
+    imgs[runner.HELPER] = {**imgs[runner.HELPER], "reviewed_by": None}
+    fake = FakeDocker()
+    monkeypatch.setattr(runner.subprocess, "run", fake)
+    out = runner.run(runner.validate(req(), imgs), imgs, None)
+    assert "helper image" in out["error"]
+    assert not any(any("@sha256:" in a for a in c) for c in fake.calls)

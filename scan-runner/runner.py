@@ -38,6 +38,8 @@ TEMPLATES: dict[str, dict] = {
                        "--skip-db-update", "--offline-scan", "/src"], "report": "file"},
 }
 LIMITS = {"memory": "2g", "cpus": "1", "pids": "256", "timeout_s": 900}
+MAX_REPORT_BYTES = 64 * 1024 * 1024  # same cap as the API's adapters (apps/api/app/scanners/base.py)
+HELPER = "npm_audit"  # images.lock entry whose image runs the prepare/readback helper containers
 
 
 class RequestError(Exception):
@@ -126,17 +128,60 @@ def docker_argv(req: ScanRequest, images: dict, registry: str | None, image_ref:
     ]
 
 
-def run(req: ScanRequest, images: dict, registry: str | None) -> dict:  # pragma: no cover - needs a container runtime
-    """Run one scan and always remove its volumes. Phase 3 follow-up: fetch source into sp-src-<job> and read the
-    report out of sp-report-<job>; this needs Docker on the host and is not exercised in tests."""
+def helper_argv(req: ScanRequest, images: dict, registry: str | None, step: str) -> list[str]:
+    """Tiny housekeeping containers around a scan: `prepare` hands the empty report volume to uid 10001 (scanner
+    images run as 10001 and a fresh volume is root-owned); `readback` prints the report, read-only, capped in size.
+
+    ponytail: the helper is the npm_audit image (node:22-alpine, has busybox), so it is pinned and review-gated by the
+    same images.lock entry; give it its own entry if npm_audit ever moves to an image without a shell.
+    """
+    if not images[HELPER].get("reviewed_by") or not DIGEST.fullmatch(str(images[HELPER].get("digest"))):
+        raise RequestError("helper image is not pinned and reviewed; refusing to run")
+    repo = f"{registry.rstrip('/')}/{HELPER}" if registry else images[HELPER]["image"].split(" ")[0]
+    common = ["docker", "run", "--rm", "--network", "none", "--read-only", "--security-opt", "no-new-privileges:true",
+              "--pids-limit", "32", "--memory", "128m", "--label", f"sp.job={req.job_id}"]
+    vol = f"type=volume,src=sp-report-{req.job_id},dst=/report"
+    if step == "prepare":  # root with only CAP_CHOWN, for one chown of the empty mount point
+        return [*common, "--cap-drop", "ALL", "--cap-add", "CHOWN", "--mount", vol,
+                f"{repo}@{images[HELPER]['digest']}", "chown", "10001:10001", "/report"]
+    return [*common, "--cap-drop", "ALL", "--user", "10001:10001", "--mount", vol + ",readonly",
+            f"{repo}@{images[HELPER]['digest']}", "head", "-c", str(MAX_REPORT_BYTES + 1), "/report/report.json"]
+
+
+def _docker(argv: list[str], timeout: int = 120) -> subprocess.CompletedProcess:
+    return subprocess.run(argv, capture_output=True, timeout=timeout, check=False)
+
+
+def run(req: ScanRequest, images: dict, registry: str | None, image_ref: str | None = None) -> dict:
+    """Run one scan, read its report back, and always remove the container's volumes.
+
+    Returns {"exit_code", "report"} or {"exit_code", "error"}, plus "stderr_tail" for diagnostics, which main.py
+    strips before answering (scanner stderr is untrusted and could echo a secret). A missing source volume, a
+    missing or oversized report, or a timeout is an error, never an empty (clean-looking) report: rule 11.
+    """
     try:
-        proc = subprocess.run(docker_argv(req, images, registry), capture_output=True, timeout=LIMITS["timeout_s"],
-                              check=False)
-        return {"exit_code": proc.returncode, "stdout": proc.stdout.decode("utf-8", "replace")
-                if TEMPLATES[req.scanner]["report"] == "stdout" else None}
+        # `docker run --mount` silently creates a missing volume, and an empty /src scans as "no findings".
+        if _docker(["docker", "volume", "inspect", req.mount_ref]).returncode != 0:
+            return {"exit_code": None, "error": "source volume missing; nothing was scanned"}
+        if _docker(helper_argv(req, images, registry, "prepare")).returncode != 0:
+            return {"exit_code": None, "error": "could not prepare the report volume"}
+        proc = _docker(docker_argv(req, images, registry, image_ref), timeout=LIMITS["timeout_s"])
+        tail = {"stderr_tail": proc.stderr.decode("utf-8", "replace")[-1500:]}
+        if TEMPLATES[req.scanner]["report"] == "stdout":
+            report = proc.stdout
+        else:
+            back = _docker(helper_argv(req, images, registry, "readback"))
+            if back.returncode != 0:
+                return {"exit_code": proc.returncode, "error": "scanner wrote no report", **tail}
+            report = back.stdout
+        if len(report) > MAX_REPORT_BYTES:
+            return {"exit_code": proc.returncode, "error": "report too large", **tail}
+        return {"exit_code": proc.returncode, "report": report.decode("utf-8", "replace"), **tail}
     except subprocess.TimeoutExpired:
-        subprocess.run(["docker", "rm", "-f", f"sp-scan-{req.job_id}"], capture_output=True, check=False)
+        _docker(["docker", "rm", "-f", f"sp-scan-{req.job_id}"])
         return {"exit_code": None, "error": "timeout"}
+    except RequestError as e:
+        return {"exit_code": None, "error": str(e)}
     finally:
         for vol in (req.mount_ref, f"sp-report-{req.job_id}"):
             subprocess.run(["docker", "volume", "rm", "-f", vol], capture_output=True, check=False)

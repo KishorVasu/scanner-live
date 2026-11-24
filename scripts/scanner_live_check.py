@@ -63,45 +63,45 @@ def fixture() -> tuple[Path, str]:
 
 def run_one(scanner: str, src: Path, images: dict, target, opts: dict, fake: str) -> dict:
     job = str(uuid.uuid4())
-    vol_src, vol_rep = f"sp-src-{job}", f"sp-report-{job}"
-    try:
-        sh("docker", "volume", "create", vol_src)
-        sh("docker", "volume", "create", vol_rep)
-        sh("docker", "run", "--rm", "-v", f"{vol_src}:/src", "-v", f"{src}:/in:ro", HELPER,
-           "sh", "-c", "cp -a /in/. /src/ && chown -R 10001:10001 /src")
-        sh("docker", "run", "--rm", "-v", f"{vol_rep}:/report", HELPER, "chown", "10001:10001", "/report")
-        req = runner.validate({"scanner": scanner, "job_id": job, "mount_ref": vol_src,
-                               **({"target": target} if target else {})}, images)
-        proc = sh(*runner.docker_argv(req, images, None, image_ref=opts.get("image_ref")), check=False, timeout=900)
-        if runner.TEMPLATES[scanner]["report"] == "stdout":
-            report = proc.stdout
-        else:
-            readback = sh("docker", "run", "--rm", "-v", f"{vol_rep}:/report:ro", HELPER, "sh", "-c",
-                          "ls -la /report >&2; cat /report/report.json", check=False)
-            report = readback.stdout
-        adapter = ADAPTERS[scanner]
-        result = {"scanner": scanner, "exit_code": proc.returncode, "report_bytes": len(report),
-                  "stderr_tail": proc.stderr.decode("utf-8", "replace")[-1500:]}
-        if runner.TEMPLATES[scanner]["report"] != "stdout":
-            result["report_dir"] = readback.stderr.decode("utf-8", "replace")[-600:]
-        result["secret_leaked_into_report"] = fake.encode() in report
-        if fake in result["stderr_tail"]:  # the evidence file is uploaded; never let the fake token ride along
-            result["stderr_tail"] = "<withheld: contained the fixture token>"
-            result["secret_leaked_into_report"] = True
-        if proc.returncode not in adapter.ok_exit_codes:
-            result["outcome"] = "failed"
-        else:
-            try:
-                parsed = adapter.parse(report)
-            except ReportError as e:
-                result["outcome"] = f"report_error: {e}"
-            else:
-                result |= {"outcome": "parsed", "findings": len(parsed.findings),
-                           "rules": sorted({f.rule_id for f in parsed.findings})[:20],
-                           "packages": sorted({f.package for f in parsed.findings if f.package})[:20]}
+    vol_src = f"sp-src-{job}"
+    # Stand-in for the source fetch (not built yet): copy the fixture into the job's source volume as uid 10001.
+    # Everything after this is scan-runner's real code path: prepare, sandboxed scan, readback, cleanup.
+    sh("docker", "volume", "create", vol_src)
+    sh("docker", "run", "--rm", "-v", f"{vol_src}:/src", "-v", f"{src}:/in:ro", HELPER,
+       "sh", "-c", "cp -a /in/. /src/ && chown -R 10001:10001 /src")
+    req = runner.validate({"scanner": scanner, "job_id": job, "mount_ref": vol_src,
+                           **({"target": target} if target else {})}, images)
+    out = runner.run(req, images, None, image_ref=opts.get("image_ref"))
+    report = (out.get("report") or "").encode()
+    adapter = ADAPTERS[scanner]
+    result = {"scanner": scanner, "exit_code": out.get("exit_code"), "report_bytes": len(report),
+              "stderr_tail": out.get("stderr_tail", ""), "runner_error": out.get("error")}
+    result["secret_leaked_into_report"] = fake.encode() in report
+    if fake in result["stderr_tail"]:  # the evidence file is uploaded; never let the fake token ride along
+        result["stderr_tail"] = "<withheld: contained the fixture token>"
+        result["secret_leaked_into_report"] = True
+    leftover = sh("docker", "volume", "ls", "-q", "--filter", f"name={job}").stdout.strip()
+    result["volumes_left_behind"] = leftover.decode().split() if leftover else []
+    if out.get("error") or out.get("exit_code") not in adapter.ok_exit_codes:
+        result["outcome"] = "failed"
         return result
-    finally:
-        sh("docker", "volume", "rm", "-f", vol_src, vol_rep, check=False)
+    try:
+        parsed = adapter.parse(report)
+    except ReportError as e:
+        result["outcome"] = f"report_error: {e}"
+    else:
+        result |= {"outcome": "parsed", "findings": len(parsed.findings),
+                   "rules": sorted({f.rule_id for f in parsed.findings})[:20],
+                   "packages": sorted({f.package for f in parsed.findings if f.package})[:20]}
+    return result
+
+
+def missing_source_is_an_error(images: dict) -> bool:
+    """Rule 11: without a source volume, runner.run must refuse instead of scanning an auto-created empty volume."""
+    job = str(uuid.uuid4())
+    req = runner.validate({"scanner": "gitleaks", "job_id": job, "mount_ref": f"sp-src-{job}"}, images)
+    out = runner.run(req, images, None)
+    return "report" not in out and "source volume missing" in (out.get("error") or "")
 
 
 def main() -> int:
@@ -120,6 +120,8 @@ def main() -> int:
                  "secret_leaked_into_report": False}
         r["digest"] = images[scanner]["digest"]
         results.append(r)
+        if r.get("volumes_left_behind"):
+            failures.append(f"{scanner}: volumes not removed: {r['volumes_left_behind']}")
         if r["secret_leaked_into_report"]:
             failures.append(f"{scanner}: fake secret appears in the report")
         if "expect" in opts:
@@ -128,6 +130,8 @@ def main() -> int:
                 failures.append(f"{scanner}: expected {opts['expect']!r}, got {r.get('outcome')} {r.get('rules')}")
         elif r.get("outcome") == "parsed":
             failures.append(f"{scanner}: expected to fail ({opts['expect_failure']}) but parsed; update the plan")
+    if not missing_source_is_an_error(images):
+        failures.append("runner.run scanned without a source volume")
     Path("scanner-live-report.json").write_text(json.dumps(results, indent=2))
     print(json.dumps(results, indent=2))
     for f in failures:
