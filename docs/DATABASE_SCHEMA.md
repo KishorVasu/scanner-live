@@ -121,7 +121,7 @@ Status: Phase 0 draft, awaiting approval. Engine: PostgreSQL. ORM: SQLAlchemy 2 
 
 **reports** — `kind`, `scope` (JSONB), `status` (`report_status`), `file_path`, `generated_by_run_id` FK, `approved_by` FK users nullable, `approved_at`.
 
-**learning_notes** — `title`, `body_md`, `references` (JSONB), `related_projects` (uuid[]), `status` (`note_status`), `reviewed_by` nullable. Never auto-shared. (Later phase.)
+Learning Notes was removed from scope by the user on 2026-11-25. No `learning_notes` table exists or is planned.
 
 ### Audit
 
@@ -197,7 +197,7 @@ erDiagram
   agent_runs ||--o{ scan_jobs : requests
 ```
 
-`audit_logs`, `policies`, `webhook_deliveries` and `learning_notes` reference other rows by typed ID in JSON/text and are omitted from the diagram for readability.
+`audit_logs`, `policies`, and `webhook_deliveries` reference other rows by typed ID in JSON/text and are omitted from the diagram for readability.
 
 ## 7. Additions beyond the master prompt table list
 

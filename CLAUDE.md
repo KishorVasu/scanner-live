@@ -10,7 +10,7 @@ This is a security-sensitive system. It will hold read access to every project t
 
 ## 1. Fixed decisions
 
-- **Architecture: hybrid.** A central self-hosted server plus local agents. Deterministic pipelines do all detection. LLM agents run only at named steps: advisory research, impact reasoning, report writing, integrity summaries and (later) learning notes.
+- **Architecture: hybrid.** A central self-hosted server plus local agents. Deterministic pipelines do all detection. LLM agents run only at named steps: advisory research, impact reasoning, report writing and integrity summaries. (Learning Notes was removed from scope on 2026-11-25.)
 - **Project access: both.** A GitHub App (read-only) for repositories, and a Python local agent for administrator-approved folders on developer machines or servers.
 - **Detection is deterministic.** Scanners produce the evidence. Claude explains, correlates, prioritises and drafts. Claude never decides on its own that code is vulnerable or safe without scanner or advisory evidence.
 
@@ -53,7 +53,7 @@ Enforce every rule below in code and cover it with a test.
 
 ## 4. Components
 
-**Dashboard pages:** Overview, Projects, Security Intelligence, Scans & Findings, Repository Integrity, Reports, Approvals, Learning Notes (later), Settings, Audit Log.
+**Dashboard pages:** Overview, Projects, Security Intelligence, Scans & Findings, Repository Integrity, Reports, Approvals, Settings, Audit Log.
 
 **API modules:** auth (argon2 passwords + TOTP), RBAC (admin, approver, developer, viewer), projects, components, repositories, local agents, GitHub App, scans, findings, advisories, impacts, approvals, reports, audit.
 
@@ -80,7 +80,7 @@ Each project stores: name, slug, description, owner, criticality, status, scan p
 
 UUID primary keys, `created_at`/`updated_at` everywhere, Postgres enums for statuses, proper foreign keys and indexes. JSONB only for genuinely variable data (scanner summaries, affected version ranges, approval scope).
 
-Tables: `users`, `roles`, `permissions`, `user_roles`, `role_permissions`, `projects`, `project_components`, `repositories`, `technology_profiles`, `dependency_inventory`, `local_agents`, `scan_policies`, `scan_jobs`, `scan_results`, `security_findings`, `finding_evidence`, `advisory_sources`, `security_advisories`, `project_impacts`, `repository_events`, `approvals`, `agent_runs`, `test_runs`, `reports`, `learning_notes`, `audit_logs`.
+Tables: `users`, `roles`, `permissions`, `user_roles`, `role_permissions`, `projects`, `project_components`, `repositories`, `technology_profiles`, `dependency_inventory`, `local_agents`, `scan_policies`, `scan_jobs`, `scan_results`, `security_findings`, `finding_evidence`, `advisory_sources`, `security_advisories`, `project_impacts`, `repository_events`, `approvals`, `agent_runs`, `test_runs`, `reports`, `audit_logs`.
 
 Key rules:
 - `security_findings.fingerprint` is unique. Repeated detections update `last_seen_at` and add a `finding_evidence` row. Nothing is silently discarded.
@@ -105,7 +105,6 @@ Every agent is one Pydantic spec with: `name`, `purpose`, `input_schema`, `outpu
 | Report Generation | 5 | Yes | read_findings, read_impacts, render_pdf (output is a draft) |
 | QA & Validation | later | Yes | run_playwright, run_zap — approved staging URL only, every run approved |
 | Application Security | later | Yes | static auth-flow review; any dynamic test needs approval |
-| Learning Notes | later | Yes | read_advisories, read_impacts — drafts only, never shared automatically |
 
 ## 8. Repository integrity checks (first-release feature)
 

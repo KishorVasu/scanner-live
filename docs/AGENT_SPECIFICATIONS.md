@@ -182,7 +182,6 @@ Forbidden action names registered as explicit deny policies: `edit_file`, `write
 | --- | --- | --- | --- |
 | QA and Validation | Yes | `run_playwright`, `run_zap` (approved staging URL only) | Every run |
 | Application Security | Yes | Static auth-flow review; same reads as Code Security | Any dynamic test |
-| Learning Notes | Yes | `read_advisories`, `read_impacts` | Sharing, always; drafts never auto-shared |
 
 ## 6. Permission matrix
 
@@ -198,6 +197,7 @@ Forbidden action names registered as explicit deny policies: `edit_file`, `write
 | Report Generation | 5 | Yes | read_findings, read_impacts, render_pdf | reports (draft) | Publishing outside dashboard |
 | QA and Validation | later | Yes | run_playwright, run_zap | test_runs | Every run |
 | Application Security | later | Yes | static review tools | security_findings | Any dynamic test |
-| Learning Notes | later | Yes | read_advisories, read_impacts | learning_notes (draft) | Sharing, always |
+
+Learning Notes was removed from scope by the user on 2026-11-25. The deny policy `share_learning_note` stays in place.
 
 No agent has: shell, raw filesystem path, DB session, open network, or any `forbidden` tool.
