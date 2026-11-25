@@ -67,20 +67,19 @@ async def test_challenge_flood_is_limited_per_agent(client, make_user):
     assert codes == [200] * limit + [429, 429]
 
 
-async def test_session_signature_guessing_is_limited(client, make_user):
+async def test_session_failures_limit_the_attacker_ip_not_the_agent(client, make_user, monkeypatch):
+    monkeypatch.setattr(get_settings(), "agent_session_failures_per_ip", 3)
     aid, key = await _registered_agent(client, make_user)
-    limit = get_settings().agent_session_failures
-    wrong = Ed25519PrivateKey.generate()
-    for _ in range(limit):
+    wrong, attacker = Ed25519PrivateKey.generate(), ip_header()
+
+    async def attempt(signer, headers):
         nonce = (await client.post("/api/agents/challenge", json={"agent_id": aid})).json()["nonce"]
-        sig = base64.b64encode(wrong.sign(b"sp-agent-session:" + nonce.encode() + b":" + aid.encode())).decode()
-        r = await client.post("/api/agents/session", headers=ip_header(),
-                              json={"agent_id": aid, "nonce": nonce, "signature": sig})
-        assert r.status_code == 401
-    nonce = (await client.post("/api/agents/challenge", json={"agent_id": aid})).json()["nonce"]
-    good = base64.b64encode(key.sign(b"sp-agent-session:" + nonce.encode() + b":" + aid.encode())).decode()
-    r = await client.post("/api/agents/session", headers=ip_header(), json={"agent_id": aid, "nonce": nonce, "signature": good})
-    assert r.status_code == 429  # even the right key waits out the window once the agent is under attack
+        sig = base64.b64encode(signer.sign(b"sp-agent-session:" + nonce.encode() + b":" + aid.encode())).decode()
+        return (await client.post("/api/agents/session", headers=headers,
+                                  json={"agent_id": aid, "nonce": nonce, "signature": sig})).status_code
+
+    assert [await attempt(wrong, attacker) for _ in range(4)] == [401, 401, 401, 429]
+    assert await attempt(key, ip_header()) == 200  # the real agent, from its own address, is not locked out
 
 
 @pytest.mark.parametrize("endpoint", ["/api/agents/challenge", "/api/agents/session"])

@@ -140,6 +140,18 @@ fallback on; JSON output only, the model gets no tools.
 - [ ] Restore from backup tested.
 - [ ] All projects onboarded.
 
+**Status (2026-11-25): built from the dev PC and CI; server and pilot steps open.**
+
+| Item | Done | Still open (who) |
+| --- | --- | --- |
+| Security review | `docs/SECURITY_REVIEW.md`: 9 findings fixed with tests, 4 accepted with the administrator as interim owner | User sign-off on the accepted items; security owner (OQ-4); DAST on the server (OQ-1) |
+| Permission tests | `tests/test_authz_matrix.py`: every route × every role, plus a reviewed access table | none |
+| Load test | `scripts/load_test.py` and CI job `load-test` (20 projects, 60 repositories, 6,000 findings) | Run `deploy/server/load_test.sh` on the server against the resource budget (OQ-1) |
+| Grafana and OTel | Prometheus, Tempo, Grafana (loopback only), app metrics, redacted traces; CI job `monitoring-stack` | Alert channel (OQ-5) |
+| Hardening | Explicit non-root users; app images built and checked in CI (`app-images`, which found and fixed a broken API Dockerfile line); socket only through the opt-in `docker-compose.scan-exec.yml` (scan-runner only) | gVisor runtime is ready as an opt-in (`SP_SCANNER_RUNTIME=runsc`, allowlisted, tested); install and validate it on the server. Host hardening via `deploy/server/preflight.sh` and the runbook in §14 (server) |
+| Backup and restore | `deploy/backup/` (age, read-only dump, verified restore); CI job `backup-restore` | Off-site target and key custody (user); restore drill on the server with `deploy/server/restore_drill.sh` |
+| Pilot and onboarding | Runbook in `SELF_HOSTED_DEPLOYMENT.md` §13 | GitHub org and pilot names (OQ-2); `reviewed_by` in `images.lock` (user); onboarding |
+
 ## Folder structure
 
 ```

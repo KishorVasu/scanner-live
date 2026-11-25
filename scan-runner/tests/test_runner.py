@@ -106,6 +106,20 @@ def test_offline_scanners_get_no_network_and_npm_never_runs_scripts():
     assert not any(a in ("install", "ci", "run", "run-script", "exec") for a in scanner_args)
 
 
+
+def test_gvisor_runtime_is_opt_in_and_allowlisted(monkeypatch):
+    def argv():
+        return runner.docker_argv(runner.validate(req(scanner="gitleaks"), images()), images(), None)
+
+    monkeypatch.delenv("SP_SCANNER_RUNTIME", raising=False)
+    assert "--runtime" not in argv()
+    monkeypatch.setenv("SP_SCANNER_RUNTIME", "runsc")
+    a = argv()
+    assert a[a.index("--runtime") + 1] == "runsc" and a.index("--runtime") < a.index("--rm")
+    monkeypatch.setenv("SP_SCANNER_RUNTIME", "runc --privileged")
+    with pytest.raises(runner.RequestError):
+        argv()
+
 # ---------- run(): prepare, scan, readback, cleanup (fake docker; no container runtime needed) ----------
 
 class FakeDocker:

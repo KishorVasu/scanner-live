@@ -91,6 +91,17 @@ def test_symlink_file_escape_refused(layout):
     assert all(d["package"] != "evil" for d in payload["dependencies"])
 
 
+def test_symlink_inside_root_to_secret_file_refused(layout):
+    root, _ = layout
+    (root / ".env").write_text("DB_PASSWORD=fixture-not-real-value")
+    _symlink(root / ".env", root / "requirements-dev.txt")
+    assert "requirements-dev.txt" not in list(walk(root))
+    with pytest.raises(PathError):
+        read_manifest(root, "requirements-dev.txt")
+    payload, _ = scan_root("repo", str(root))
+    assert "fixture-not-real-value" not in json.dumps(payload)
+
+
 def test_symlink_dir_escape_not_followed(layout):
     root, outside = layout
     _symlink(outside, root / "linked", is_dir=True)

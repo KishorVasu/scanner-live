@@ -1,3 +1,4 @@
+import uuid
 import pyotp
 from sqlalchemy import select
 
@@ -35,6 +36,20 @@ async def test_rate_limit(client, make_user):
         r = await client.post("/api/auth/login", json={"email": u.email, "password": "wrong-password"})
         assert r.status_code == 401
     r = await client.post("/api/auth/login", json={"email": u.email, "password": u.password, "totp_code": u.code()})
+    assert r.status_code == 429
+
+
+async def test_rate_limit_per_ip_stops_password_spraying(client, make_user, monkeypatch):
+    from app.core.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "login_max_failures_per_ip", 3)
+    ip = {"x-forwarded-for": f"198.51.100.{uuid.uuid4().int % 250 + 1}"}
+    for _ in range(3):  # one try each on different emails: the per-email limit never triggers
+        r = await client.post("/api/auth/login", headers=ip,
+                              json={"email": f"spray-{uuid.uuid4().hex[:8]}@example.test", "password": "x" * 12})
+        assert r.status_code == 401
+    u = await make_user("viewer")
+    r = await client.post("/api/auth/login", headers=ip, json={"email": u.email, "password": u.password, "totp_code": u.code()})
     assert r.status_code == 429
 
 

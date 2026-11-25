@@ -248,8 +248,10 @@ async def test_github_not_configured_returns_503(client, make_user):
 
 # ---------------- webhooks ----------------
 
-async def hook(client, event: str, payload: dict, delivery: str | None = None, secret: bytes = WEBHOOK_SECRET, sign=True):
-    body = json.dumps(payload).encode()
+async def hook(client, event: str, payload: dict, delivery: str | None = None, secret: bytes = WEBHOOK_SECRET, sign=True,
+               nonce=True):
+    # Real deliveries always differ (timestamps, hook data); a nonce stands in for that.
+    body = json.dumps({**payload, "_nonce": uuid.uuid4().hex} if nonce else payload).encode()
     headers = {"x-github-event": event, "x-github-delivery": delivery or uuid.uuid4().hex}
     if sign:
         headers["x-hub-signature-256"] = "sha256=" + hmac.new(secret, body, hashlib.sha256).hexdigest()
@@ -264,6 +266,26 @@ async def test_webhook_signature_and_idempotency(client, github):
     d = "d-" + uuid.uuid4().hex
     assert (await hook(client, "ping", {}, delivery=d)).json()["status"] == "ok"
     assert (await hook(client, "ping", {}, delivery=d)).json()["status"] == "duplicate"
+
+
+async def test_bad_signature_audit_rows_are_capped_per_ip(client, github, owner_db, monkeypatch):
+    monkeypatch.setattr(get_settings(), "webhook_bad_signature_audits_per_minute", 2)
+    ip = f"203.0.113.{uuid.uuid4().int % 250 + 1}"
+    for _ in range(5):
+        body = b"{}"
+        r = await client.post("/api/webhooks/github", content=body, headers={
+            "x-github-event": "ping", "x-github-delivery": uuid.uuid4().hex, "x-hub-signature-256": "sha256=00",
+            "x-forwarded-for": ip})
+        assert r.status_code == 401
+    rows = await owner_db.scalar(select(func.count()).select_from(AuditLog).where(
+        AuditLog.outcome == "bad_signature", AuditLog.ip == ip))
+    assert rows == 2
+
+
+async def test_webhook_replayed_body_with_new_delivery_id_is_duplicate(client, github):
+    payload = {"zen": "replay-" + uuid.uuid4().hex}
+    assert (await hook(client, "ping", payload, nonce=False)).json()["status"] == "ok"
+    assert (await hook(client, "ping", payload, nonce=False)).json()["status"] == "duplicate"
 
 
 async def test_webhook_rate_limit_per_repo(client, github, monkeypatch):

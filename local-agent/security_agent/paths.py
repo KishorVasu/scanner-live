@@ -51,6 +51,9 @@ def safe_join(root: Path, rel: str) -> Path:
     real = Path(os.path.realpath(root.joinpath(*parts)))
     if not _inside(root, real):
         raise PathError(f"path leaves the approved root: {rel!r}")
+    # A link inside the root can still point at a secret file (requirements-dev.txt -> .env): check the target too.
+    if real != root and is_secret_path(real.relative_to(root).as_posix()):
+        raise PathError(f"path resolves to a secret-pattern file: {rel!r}")
     return real
 
 
@@ -76,7 +79,8 @@ def walk(root: Path, stats: dict | None = None) -> Iterator[str]:
                 continue
             if full.is_symlink():
                 target = Path(os.path.realpath(full))
-                if not _inside(root, target) or not target.is_file():
+                if not _inside(root, target) or not target.is_file() or is_secret_path(
+                        target.relative_to(root).as_posix()):
                     stats["symlink_escapes_refused"] = stats.get("symlink_escapes_refused", 0) + 1
                     continue
             elif not full.is_file():

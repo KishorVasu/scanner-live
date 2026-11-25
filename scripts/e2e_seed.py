@@ -86,6 +86,7 @@ async def main(creds_path: str) -> None:
             return p
 
         unscanned, scanned = project("E2E Unscanned"), project("E2E Scanned")
+        scanned.owner_user_id = users["developer"].id  # developers triage only projects they own
         await s.flush()
         repos = {}
         for p in (unscanned, scanned):

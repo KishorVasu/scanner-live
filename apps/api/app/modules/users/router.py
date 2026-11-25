@@ -70,6 +70,9 @@ async def set_roles(user_id: uuid.UUID, body: RolesIn, request: Request,
     if user is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
     before = sorted(r.name for r in user.roles)
+    # The caller is an active admin; refusing self-demotion means at least one admin always remains (review finding 5).
+    if user.id == p.id and "admin" in before and "admin" not in body.roles:
+        raise HTTPException(status.HTTP_409_CONFLICT, "cannot remove your own admin role")
     user.roles = await _roles(db, body.roles)
     record(db, actor_type=ActorType.user, actor_id=p.id, action="users.set_roles", outcome="success",
            target_type="user", target_id=user.id, ip=client_ip(request),

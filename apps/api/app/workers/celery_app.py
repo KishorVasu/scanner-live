@@ -30,6 +30,27 @@ celery.conf.update(
 )
 
 
+@signals.worker_init.connect
+def _metrics(**_: object) -> None:
+    from app.core.metrics import serve_worker_metrics
+
+    serve_worker_metrics()
+
+
+@signals.worker_process_init.connect
+def _tracing(**_: object) -> None:
+    from app.core.tracing import setup_tracing
+
+    setup_tracing(celery=True)  # after fork: each pool child exports its own spans
+
+
+@signals.task_postrun.connect
+def _count(task=None, state=None, **_: object) -> None:
+    from app.core.metrics import TASKS
+
+    TASKS.labels(getattr(task, "name", "unknown"), state or "unknown").inc()
+
+
 @signals.setup_logging.connect
 def _logging(**_: object) -> None:
     """Connecting this signal stops Celery from replacing our redacting log setup."""

@@ -53,11 +53,12 @@ class Settings(BaseSettings):
     agent_challenge_seconds: int = 120
     agent_register_failures_per_ip: int = 10  # per login_window_minutes
     agent_challenges_per_minute: int = 10
-    agent_session_failures: int = 5  # per agent, per login_window_minutes
     agent_session_failures_per_ip: int = 20
 
     approval_ttl_hours: int = 24
     login_max_failures: int = 5
+    webhook_bad_signature_audits_per_minute: int = 10  # per IP; the 401 is always sent (review finding 7)
+    login_max_failures_per_ip: int = 30  # password spraying across many emails (review finding 6)
     login_window_minutes: int = 15
 
     def resolved_database_url(self) -> str:

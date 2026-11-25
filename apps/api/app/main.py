@@ -5,6 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.logging import configure_logging
+from app.core.metrics import http_middleware
+from app.core.tracing import setup_tracing
 from app.db.session import get_db
 from app.modules.agents.router import router as agents_router
 from app.modules.approvals.router import router as approvals_router
@@ -33,6 +35,8 @@ def create_app() -> FastAPI:
               findings_router, impacts_router, overview_router,
               reports_router):
         app.include_router(r)
+    app.middleware("http")(http_middleware)
+    setup_tracing(app=app)
 
     @app.get("/api/health")
     async def health() -> dict:

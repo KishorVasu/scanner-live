@@ -273,9 +273,10 @@ def signing_message(nonce: str, agent_id: uuid.UUID) -> bytes:
 async def open_session(body: SessionIn, request: Request, db: AsyncSession = Depends(get_db)):
     s = get_settings()
     ip = client_ip(request) or "unknown"
-    await lock_key(db, f"agent-session:{body.agent_id}")
-    if (await _failures(db, "agents.session", target_id=str(body.agent_id)) >= s.agent_session_failures
-            or await _failures(db, "agents.session", ip=ip) >= s.agent_session_failures_per_ip):
+    # Per IP only: an Ed25519 signature cannot be guessed, so a per-agent counter would only let anyone who knows an
+    # agent_id lock that agent out (review finding 8).
+    await lock_key(db, f"agent-session-ip:{ip}")
+    if await _failures(db, "agents.session", ip=ip) >= s.agent_session_failures_per_ip:
         raise await _too_many(db, "agents.session", request, body.agent_id)
     agent = await _active_agent(db, body.agent_id)
     ch = await db.scalar(select(LocalAgentChallenge).where(

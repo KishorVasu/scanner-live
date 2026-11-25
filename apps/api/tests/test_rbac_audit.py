@@ -46,6 +46,16 @@ async def test_admin_creates_user_and_action_is_audited(client, make_user, owner
     assert "long-enough-pass" not in str(audit)
 
 
+async def test_admin_cannot_remove_own_admin_role(client, make_user):
+    admin = await make_user("admin")
+    csrf = await login(client, admin)
+    r = await client.put(f"/api/users/{admin.id}/roles", headers=csrf, json={"roles": ["viewer"]})
+    assert r.status_code == 409
+    other = await make_user("admin")
+    r = await client.put(f"/api/users/{other.id}/roles", headers=csrf, json={"roles": ["viewer"]})
+    assert r.status_code == 200 and r.json()["roles"] == ["viewer"]
+
+
 @pytest.mark.parametrize("sql", ["UPDATE audit_logs SET outcome='x'", "DELETE FROM audit_logs", "TRUNCATE audit_logs"])
 async def test_audit_log_append_only_for_app_role(app_db, sql):
     await app_db.execute(text("INSERT INTO audit_logs (actor_type, action, outcome) VALUES ('system','test','ok')"))

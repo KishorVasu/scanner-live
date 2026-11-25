@@ -232,6 +232,8 @@ class RepositoryEvent(Timestamps, Base):
 class WebhookDelivery(Timestamps, Base):
     __tablename__ = "webhook_deliveries"
     delivery_id: Mapped[str] = mapped_column(String(64), unique=True)
+    # The delivery header is not covered by the signature; the body is. A replayed body is a duplicate.
+    body_sha256: Mapped[str | None] = mapped_column(String(64), unique=True)
     event: Mapped[str] = mapped_column(String(64))
     github_repo_id: Mapped[int | None] = mapped_column(BigInteger, index=True)
     status: Mapped[str] = mapped_column(String(32))

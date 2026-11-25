@@ -6,6 +6,7 @@ is not pinned cannot run.
 """
 
 import json
+import os
 import re
 import subprocess
 import time
@@ -133,9 +134,21 @@ def _env(env: dict) -> list[str]:
     return [x for k, v in env.items() for x in ("--env", f"{k}={v}")]
 
 
+# Optional stronger isolation (Phase 6): SP_SCANNER_RUNTIME=runsc runs every scanner and sync container under gVisor.
+# Only these values are accepted; anything else refuses to start a container.
+RUNTIMES = {"": [], "runc": [], "runsc": ["--runtime", "runsc"]}
+
+
+def _runtime() -> list[str]:
+    value = os.environ.get("SP_SCANNER_RUNTIME", "")
+    if value not in RUNTIMES:
+        raise RequestError(f"SP_SCANNER_RUNTIME={value!r} is not allowed (use runc or runsc)")
+    return RUNTIMES[value]
+
+
 def _sandbox(name: str, label: str, network: str) -> list[str]:
     """Flags shared by every scanner and sync container."""
-    return ["docker", "run", "--rm", "--name", name, "--label", f"sp.job={label}", "--user", "10001:10001",
+    return ["docker", "run", *_runtime(), "--rm", "--name", name, "--label", f"sp.job={label}", "--user", "10001:10001",
             "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true",
             "--pids-limit", LIMITS["pids"], "--memory", LIMITS["memory"], "--cpus", LIMITS["cpus"],
             "--network", network, "--tmpfs", "/tmp:rw,noexec,nosuid,size=256m"]

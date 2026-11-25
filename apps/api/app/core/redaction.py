@@ -17,6 +17,8 @@ _KEY = (
     r"[\w\-]*"
 )
 
+_KEY_NAME = re.compile(_KEY)
+
 # Rules with a named group "v" redact only that group; others redact the whole match.
 RULES: list[tuple[str, re.Pattern[str]]] = [
     ("private-key", re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|\Z)")),
@@ -65,6 +67,12 @@ class Redactor:
     def _marker(self, rule: str, value: str) -> str:
         return f"[REDACTED:{rule}:{self.match_hash(value)[:8]}]"
 
+    def _value(self, key: str, v: Any) -> Any:
+        # {"password": "hunter2xyz"}: the key-name rules need "key: value" in one string, so check the key here.
+        if isinstance(v, str) and len(v) >= 4 and _KEY_NAME.fullmatch(key) and not v.startswith("[REDACTED:"):
+            return self._marker("generic-secret", v)
+        return self.redact_obj(v)
+
     def redact(self, text: str) -> str:
         for name, pattern in RULES:
             text = _outside_markers(text, lambda seg, p=pattern, n=name: p.sub(lambda m: self._replace(n, m), seg))
@@ -96,7 +104,7 @@ class Redactor:
         if isinstance(obj, (bytes, bytearray)):
             return self.redact(bytes(obj).decode("utf-8", errors="replace"))
         if isinstance(obj, dict):
-            return {self.redact(str(k)): self.redact_obj(v) for k, v in obj.items()}
+            return {self.redact(str(k)): self._value(str(k), v) for k, v in obj.items()}
         if isinstance(obj, (list, tuple, set, frozenset)):
             return [self.redact_obj(v) for v in obj]
         if hasattr(obj, "model_dump"):

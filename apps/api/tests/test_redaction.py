@@ -73,6 +73,13 @@ def test_review_gaps_are_closed():
         assert secret not in R.redact(text), text
 
 
+def test_redact_obj_secret_named_keys():
+    out = R.redact_obj({"password": "hunter2xyz", "detail": {"DB_PASSWORD": "plainvalue"}, "tokens_in": 42,
+                        "name": "keep-me"})
+    assert "hunter2xyz" not in str(out) and "plainvalue" not in str(out)
+    assert out["tokens_in"] == 42 and out["name"] == "keep-me"
+
+
 def test_redact_obj_fails_closed_on_other_types():
     tok = FAKES["github-token"]
     out = R.redact_obj({"a": tok.encode(), "b": {tok}, "c": (1, None, True)})

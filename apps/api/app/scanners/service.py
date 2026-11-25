@@ -16,6 +16,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.metrics import SCAN_JOBS
 from app.core.redaction import get_redactor
 from app.db.registry import ProjectComponent, Repository, Severity
 from app.db.scanning import (
@@ -78,6 +79,7 @@ async def create_job(db: AsyncSession, repo: Repository, scanner: Scanner, trigg
 async def fail_job(db: AsyncSession, job: ScanJob, reason: str) -> ScanJob:
     """Record a failure. Findings are left exactly as they were (rule R11)."""
     job.status, job.error, job.finished_at = ScanStatus.failed, get_redactor().redact(reason)[:2000], _now()
+    SCAN_JOBS.labels(job.scanner.value, "failed").inc()
     return job
 
 
@@ -147,6 +149,7 @@ async def ingest(db: AsyncSession, job: ScanJob, parsed: ParseResult, raw_report
     if not partial:
         await _resolve_missing(db, job, repo.id, seen, parsed.coverage, now)
     job.status, job.finished_at = (ScanStatus.partial if partial else ScanStatus.succeeded), now
+    SCAN_JOBS.labels(job.scanner.value, job.status.value).inc()
     return job
 
 

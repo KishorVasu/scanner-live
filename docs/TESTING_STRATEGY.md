@@ -63,11 +63,21 @@ The Anthropic API is never called in CI. The `LLMProvider` interface makes the f
 - **Impact rules:** extra-condition advisory never `confirmed_affected` on version alone; incomplete inventory yields `not_scanned` / `needs_verification`.
 - **Scheduling:** unchanged hashes skip; job dedup on repository + scanner + inventory hash; retries with backoff; task timeouts.
 - **Migrations:** upgrade from empty, downgrade one step, upgrade again.
+- **Phase 6:**
+  - Every route × every role against a reviewed access table (`test_authz_matrix.py`).
+  - Webhook body replay; per-IP login and agent-session limits; capped bad-signature audit rows; admin self-demotion.
+  - Local-agent symlink to a secret file inside the root.
+  - Redaction of secret-named JSON keys and of trace spans; bounded metric labels.
+  - Compose policy: non-root users, loopback-only publishing, socket override scoped to scan-runner.
 
 ## 5. CI
 
 - GitHub Actions, every `uses:` pinned by full commit SHA.
 - Jobs: lint + type check (Python and TS), unit + integration (with Postgres and Redis), frontend tests, OSV-Scanner and Gitleaks on this repo, compose policy test, nightly scanner-integration and Playwright.
+- Phase 6 jobs:
+  - `backup-restore`: real age, dump as `platform_readonly`, restore into a new database, verify.
+  - `load-test`: 20 projects, latency budget.
+  - `monitoring-stack`: pinned Prometheus, Tempo and Grafana with the repo configs.
 - A phase gate requires the full suite green, run in-session, with output included in the phase report.
 
 ## 6. Environment note

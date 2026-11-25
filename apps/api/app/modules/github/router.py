@@ -18,7 +18,7 @@ from sp_inventory import manifest_paths
 from app.agents.discovery import enqueue_discovery
 from app.agents.scanning import enqueue_agent
 from app.core.config import get_settings, master_key
-from app.db.models import ActorType
+from app.db.models import ActorType, AuditLog
 from app.db.registry import (
     GithubInstallation,
     GithubInstallationRepo,
@@ -167,8 +167,15 @@ async def github_webhook(request: Request, db: AsyncSession = Depends(get_db)):
     delivery = request.headers.get("x-github-delivery", "")[:64]
     event = request.headers.get("x-github-event", "")[:64]
     if not hmac.compare_digest(sent.encode(), expected.encode()):
-        _audit(db, event or "unknown", "bad_signature", delivery or None, {"ip": client_ip(request)})
-        await db.commit()
+        # Unauthenticated callers must not be able to grow the append-only audit table without bound.
+        ip = client_ip(request)
+        recent = await db.scalar(select(func.count()).select_from(AuditLog).where(
+            AuditLog.outcome == "bad_signature", AuditLog.ip == ip,
+            AuditLog.at >= datetime.now(UTC) - timedelta(minutes=1)))
+        if recent < get_settings().webhook_bad_signature_audits_per_minute:
+            record(db, actor_type=ActorType.system, actor_id="github-webhook", action=f"webhook.{event or 'unknown'}",
+                   outcome="bad_signature", target_type="delivery", target_id=delivery or None, ip=ip)
+            await db.commit()
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid signature")
     if not delivery or not event:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "missing delivery or event header")
@@ -180,8 +187,9 @@ async def github_webhook(request: Request, db: AsyncSession = Depends(get_db)):
     gh_repo_id = (payload.get("repository") or {}).get("id")
     inserted = await db.scalar(
         pg_insert(WebhookDelivery)
-        .values(delivery_id=delivery, event=event, github_repo_id=gh_repo_id, status="received")
-        .on_conflict_do_nothing(index_elements=["delivery_id"])
+        .values(delivery_id=delivery, body_sha256=hashlib.sha256(body).hexdigest(), event=event,
+                github_repo_id=gh_repo_id, status="received")
+        .on_conflict_do_nothing()  # same delivery ID, or the same signed body under a new ID (replay)
         .returning(WebhookDelivery.id)
     )
     if inserted is None:

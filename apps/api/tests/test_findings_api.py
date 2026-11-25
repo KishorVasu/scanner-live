@@ -70,15 +70,12 @@ async def test_filters(client, make_user, seeded):
 
 
 async def test_scanned_flag_separates_not_scanned_from_no_findings(client, make_user, owner_db, seeded):
-    _, repo = seeded
+    p, repo = seeded
     await login(client, await make_user("viewer"))
-    empty = {"project_id": str(uuid.uuid4())}
-    before = (await client.get("/api/findings", params=empty)).json()
     owner_db.add(ScanJob(repository_id=repo.id, scanner=Scanner.osv_scanner, trigger=ScanTrigger.manual,
                          inventory_hash="h" * 64, status=ScanStatus.succeeded))
     await owner_db.commit()
-    after = (await client.get("/api/findings", params=empty)).json()
-    assert before["total"] == after["total"] == 0
-    assert after["scanned"] is True  # "no findings" only once something was actually scanned
-    # ponytail: the flag is global and the test DB is shared, so `before` may already be True from other tests.
-    assert isinstance(before["scanned"], bool)
+    assert (await client.get("/api/findings", params={"project_id": str(p.id)})).json()["scanned"] is True
+    # A scan of another project never makes an unscanned project read as "no findings" (rule 11).
+    other = (await client.get("/api/findings", params={"project_id": str(uuid.uuid4())})).json()
+    assert other["total"] == 0 and other["scanned"] is False

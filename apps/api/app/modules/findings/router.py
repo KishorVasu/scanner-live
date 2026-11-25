@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.registry import Project, Severity
+from app.db.registry import Project, ProjectComponent, Repository, Severity
 from app.core.redaction import get_redactor
 from app.db.models import ActorType
 from app.db.scanning import FindingEvidence, FindingStatus, ScanJob, ScanStatus, Scanner, SecurityFinding
@@ -51,7 +51,13 @@ async def list_findings(
         .offset(offset).limit(limit)
     )
     # Rule 11: "nothing found" and "nothing scanned" must look different in the UI.
-    scanned = await db.scalar(select(exists().where(ScanJob.status.in_([ScanStatus.succeeded, ScanStatus.partial]))))
+    # Scoped to the project when one is asked for: a scan elsewhere says nothing about this project.
+    ok = [ScanJob.status.in_([ScanStatus.succeeded, ScanStatus.partial])]
+    if project_id:
+        ok.append(ScanJob.repository_id.in_(
+            select(Repository.id).join(ProjectComponent, ProjectComponent.id == Repository.component_id)
+            .where(ProjectComponent.project_id == project_id)))
+    scanned = await db.scalar(select(exists().where(*ok)))
     return {
         "total": total, "offset": offset, "limit": limit, "scanned": scanned,
         "items": [
@@ -119,6 +125,11 @@ async def triage(finding_id: uuid.UUID, body: TriageIn, request: Request,
     f = await db.get(SecurityFinding, finding_id)
     if f is None:
         raise HTTPException(http.HTTP_404_NOT_FOUND, "finding not found")
+    # SECURITY_POLICIES §4: developers triage their own projects only; approvers and admins triage any project.
+    if "findings:accept_risk" not in p.permissions:
+        owner = await db.scalar(select(Project.owner_user_id).where(Project.id == f.project_id))
+        if owner != p.id:
+            raise HTTPException(http.HTTP_403_FORBIDDEN, "developers triage findings of projects they own")
     if f.status == FindingStatus.resolved:
         raise HTTPException(http.HTTP_409_CONFLICT, "resolved findings reopen only when a scan reports them again")
     before = f.status.value

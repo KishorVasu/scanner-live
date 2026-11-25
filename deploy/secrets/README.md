@@ -10,6 +10,7 @@ Nothing in this folder except this README is ever committed (see `.gitignore`). 
 | `redis_password` | `openssl rand -hex 32 > redis_password` |
 | `master_key` | `openssl rand -base64 32 > master_key` (must decode to exactly 32 bytes) |
 | `redaction_salt` | `openssl rand -base64 48 > redaction_salt` |
+| `grafana_admin_password` | `openssl rand -base64 24 > grafana_admin_password` (Phase 6; Grafana's `admin` login, reached only through an SSH tunnel) |
 | `anthropic_api_key` | The administrator pastes the platform's Anthropic API key into this file (Phase 4). An empty file is allowed: LLM steps are then refused and the deterministic rules decide alone. |
 
 The master key is never included in backups. Losing it makes TOTP secrets unreadable (users re-enrol).

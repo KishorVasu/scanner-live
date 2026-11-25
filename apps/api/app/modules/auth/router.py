@@ -79,13 +79,14 @@ async def lock_key(db: AsyncSession, key: str) -> None:
     await db.execute(text("SELECT pg_advisory_xact_lock(hashtext(:k))"), {"k": key})
 
 
-async def failures_since(db: AsyncSession, action: str, outcome: str, target_id: str, minutes: int) -> int:
+async def failures_since(db: AsyncSession, action: str, outcome: str, target_id: str | None, minutes: int,
+                         ip: str | None = None) -> int:
+    """Count matching audit rows for one target, or for one client IP when `ip` is given."""
     since = datetime.now(UTC) - timedelta(minutes=minutes)
+    by = AuditLog.ip == ip if ip is not None else AuditLog.target_id == target_id
     return await db.scalar(
-        select(func.count())
-        .select_from(AuditLog)
-        .where(AuditLog.action == action, AuditLog.outcome == outcome, AuditLog.target_id == target_id,
-               AuditLog.at >= since)
+        select(func.count()).select_from(AuditLog)
+        .where(AuditLog.action == action, AuditLog.outcome == outcome, by, AuditLog.at >= since)
     ) or 0
 
 
@@ -120,7 +121,10 @@ async def login(body: LoginIn, request: Request, response: Response, db: AsyncSe
     s = get_settings()
     # ponytail: rate limit counted from the audit log under a per-email advisory lock; Redis counters if volume grows.
     await lock_key(db, f"login:{email}")
-    if await failures_since(db, "auth.login", "failure", email, s.login_window_minutes) >= s.login_max_failures:
+    await lock_key(db, f"login-ip:{ip}")
+    if (await failures_since(db, "auth.login", "failure", email, s.login_window_minutes) >= s.login_max_failures
+            or (ip and await failures_since(db, "auth.login", "failure", None, s.login_window_minutes, ip=ip)
+                >= s.login_max_failures_per_ip)):
         record(db, actor_type=ActorType.user, actor_id=None, action="auth.login", outcome="rate_limited",
                target_type="email", target_id=email, ip=ip)
         await db.commit()

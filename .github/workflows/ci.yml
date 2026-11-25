@@ -33,6 +33,144 @@ jobs:
       - run: pip install --require-hashes -r requirements.lock -r requirements-test.lock && pip install --no-deps -e ../../libs/inventory && pip install --no-deps -e .
       - run: python -m pytest -q -rs
 
+  # Phase 6 exit criterion "restore from backup tested": real age encryption, dump as platform_readonly, restore into
+  # a new database through the same scripts the server uses, then the checks in verify_restore.sql.
+  backup-restore:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine@sha256:f2f98726820d0342055351c6e9d36e705f5bfffb3dd53ff556325114b08afb6d
+        env:
+          POSTGRES_PASSWORD: ci-only-disposable
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      E2E_ADMIN_URL: postgresql+asyncpg://postgres:ci-only-disposable@localhost:5432/postgres
+      SP_MASTER_KEY_FILE: /tmp/sp/master_key
+      SP_REDACTION_SALT_FILE: /tmp/sp/redaction_salt
+      PGHOST: localhost
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with: { python-version: "3.12" }
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends age postgresql-client-16
+      - run: pip install --require-hashes -r apps/api/requirements.lock && pip install --no-deps -e libs/inventory -e apps/api
+      - name: Migrated, seeded database with the read-only role present (as on the server)
+        run: |
+          mkdir -p /tmp/sp && head -c 32 /dev/urandom | base64 > /tmp/sp/master_key && head -c 48 /dev/urandom | base64 > /tmp/sp/redaction_salt
+          PGPASSWORD=ci-only-disposable psql -U postgres -c "CREATE ROLE platform_readonly LOGIN PASSWORD 'ci-ro'"
+          python scripts/e2e_seed.py /tmp/sp/creds.json > /dev/null
+      - name: Backup, failed backup, restore, verify
+        run: |
+          set -eu
+          PG=/usr/lib/postgresql/16/bin
+          age-keygen -o /tmp/sp/key.txt 2>/dev/null && age-keygen -y /tmp/sp/key.txt > /tmp/sp/recipients.txt
+          export SP_BACKUP_DIR=/tmp/sp/backups SP_BACKUP_RECIPIENTS=/tmp/sp/recipients.txt
+          SP_PG_DUMP="PGPASSWORD=ci-ro $PG/pg_dump -U platform_readonly -d sp_e2e -Fc" sh deploy/backup/backup.sh
+          f=$(ls $SP_BACKUP_DIR/*.dump.age)
+          ! head -c 5 "$f" | grep -q PGDMP   # encrypted, not a plain dump
+          if SP_PG_DUMP="PGPASSWORD=ci-ro $PG/pg_dump -U platform_readonly -d no_such_db -Fc" sh deploy/backup/backup.sh; then exit 1; fi
+          [ "$(ls $SP_BACKUP_DIR/*.dump.age | wc -l)" = 1 ]
+          export SP_PSQL="PGPASSWORD=ci-only-disposable $PG/psql -U postgres -v ON_ERROR_STOP=1"
+          export SP_PG_RESTORE="PGPASSWORD=ci-only-disposable $PG/pg_restore -U postgres --exit-on-error"
+          sh deploy/backup/restore.sh "$f" /tmp/sp/key.txt sp_restored
+          if sh deploy/backup/restore.sh "$f" /tmp/sp/key.txt platform; then exit 1; fi
+
+  # The deployable images build and run as non-root (nothing else in CI builds them; a broken Dockerfile line shipped
+  # unnoticed until Phase 6).
+  app-images:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - run: docker build -t sp-api:ci -f apps/api/Dockerfile .
+      - run: docker build -t sp-scan-runner:ci -f scan-runner/Dockerfile .
+      - run: docker build -t sp-web:ci apps/web
+      - name: Non-root, and the API image imports its PDF and tracing stack
+        run: |
+          [ "$(docker run --rm sp-api:ci id -u)" = 10001 ]
+          [ "$(docker run --rm sp-scan-runner:ci id -u)" = 10001 ]
+          [ "$(docker run --rm sp-web:ci id -u)" = 1000 ]
+          docker run --rm sp-api:ci python -c "import weasyprint, app.core.tracing, app.core.metrics; print('imports ok')"
+
+  # Phase 6 load test: 20 synthetic projects (60 repositories, 6000 findings), 10 concurrent readers for 60 s against
+  # one API process; fails on any error or an endpoint p95 above 1 s. The server run sets the real budget.
+  load-test:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine@sha256:f2f98726820d0342055351c6e9d36e705f5bfffb3dd53ff556325114b08afb6d
+        env:
+          POSTGRES_PASSWORD: ci-only-disposable
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      E2E_ADMIN_URL: postgresql+asyncpg://postgres:ci-only-disposable@localhost:5432/postgres
+      SP_ENVIRONMENT: development
+      SP_COOKIE_SECURE: "false"
+      SP_MASTER_KEY_FILE: /tmp/sp/master_key
+      SP_REDACTION_SALT_FILE: /tmp/sp/redaction_salt
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with: { python-version: "3.12" }
+      - run: pip install --require-hashes -r apps/api/requirements.lock && pip install --no-deps -e libs/inventory -e apps/api
+      - name: Seed and start the API
+        run: |
+          mkdir -p /tmp/sp && head -c 32 /dev/urandom | base64 > /tmp/sp/master_key && head -c 48 /dev/urandom | base64 > /tmp/sp/redaction_salt
+          export SP_DATABASE_URL="$(python scripts/e2e_seed.py /tmp/sp/creds.json | tail -n 1)"
+          cd apps/api && nohup python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 > /tmp/sp/api.log 2>&1 &
+          for i in $(seq 30); do curl -sf http://127.0.0.1:8000/api/health && exit 0; sleep 2; done; exit 1
+      - run: python scripts/load_test.py --owner-url "${E2E_ADMIN_URL%/postgres}/sp_e2e" --creds /tmp/sp/creds.json --seconds 60
+      - if: always()
+        run: ps -o rss=,args= -C python | grep uvicorn | awk '{print "API RSS MiB:", $1/1024}'
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: load-test-report
+          path: load-test-report.json
+
+  # Phase 6 observability: the pinned Prometheus, Tempo and Grafana start with the repo's configs, Tempo accepts an
+  # OTLP span, Prometheus scrapes Tempo, and Grafana's provisioned datasources answer.
+  monitoring-stack:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: deploy
+    env:
+      SITE_ADDRESS: ci.invalid
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - name: Throwaway secrets (CI only)
+        run: |
+          for s in pg_owner_password pg_app_password pg_readonly_password master_key redaction_salt redis_password anthropic_api_key grafana_admin_password; do
+            head -c 24 /dev/urandom | base64 > secrets/$s
+          done
+      - run: docker compose config -q
+      - run: docker compose up -d prometheus tempo grafana
+      - name: Ready, span accepted, Tempo scraped, datasources healthy
+        run: |
+          set -eu
+          ex() { docker compose exec -T prometheus "$@"; }
+          for i in $(seq 60); do ex wget -qO- http://tempo:3200/ready 2>/dev/null | grep -q ready && break; sleep 2; done
+          ex wget -qO- http://127.0.0.1:9090/-/ready
+          now=$(date +%s%N)
+          span='{"resourceSpans":[{"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"ci"}}]},"scopeSpans":[{"spans":[{"traceId":"5b8efff798038103d269b633813fc60c","spanId":"eee19b7ec3c1b174","name":"ci-span","kind":1,"startTimeUnixNano":"'$now'","endTimeUnixNano":"'$now'"}]}]}]}'
+          ex wget -qO- --header "Content-Type: application/json" --post-data "$span" http://tempo:4318/v1/traces
+          sleep 40
+          ex wget -qO- 'http://127.0.0.1:9090/api/v1/query?query=up%7Bjob%3D%22tempo%22%7D' | tee /dev/stderr | grep -q '"value":\[[0-9.]*,"1"\]'
+          for i in $(seq 30); do curl -sf http://127.0.0.1:3001/api/health && break; sleep 2; done
+          pw=$(cat secrets/grafana_admin_password)
+          for uid in prometheus tempo; do curl -sf -u "admin:$pw" http://127.0.0.1:3001/api/datasources/uid/$uid/health | tee /dev/stderr | grep -q '"status":"OK"'; done
+          curl -sf -u "admin:$pw" http://127.0.0.1:3001/api/dashboards/uid/sp-overview > /dev/null
+      - if: failure()
+        run: docker compose logs prometheus tempo grafana | tail -n 200
+
   inventory-and-local-agent:
     runs-on: ubuntu-24.04
     steps:

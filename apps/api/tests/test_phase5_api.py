@@ -81,6 +81,13 @@ async def test_triage_rules(client, make_user, owner_db, world):
     assert (await client.patch(url, json={"status": "in_progress"}, headers=h)).status_code == 403
 
     h = await as_role(client, make_user, "developer")
+    # Not the owner: refused (SECURITY_POLICIES §4).
+    assert (await client.patch(url, json={"status": "in_progress"}, headers=h)).status_code == 403
+    owner = await make_user("developer")
+    p, _, _ = world
+    p.owner_user_id = owner.id
+    await owner_db.commit()
+    h = await login(client, owner)
     assert (await client.patch(url, json={"status": "in_progress"}, headers=h)).json()["status"] == "in_progress"
     # Developers cannot accept risk or mark false positives; nobody can resolve by hand.
     assert (await client.patch(url, json={"status": "accepted_risk", "note": "long enough note"}, headers=h)).status_code == 403

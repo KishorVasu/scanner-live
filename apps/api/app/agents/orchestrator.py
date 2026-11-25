@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agents.gateway import ApprovalRequired, GatewayError, RunState, ToolGateway
 from app.agents.registry import ToolRegistry
 from app.agents.spec import AgentSpec, validate_spec
+from app.core.metrics import AGENT_RUNS, LLM_TOKENS
 from app.core.redaction import Redactor
 from app.db.models import ActorType, AgentRun, AgentRunStatus
 from app.modules.audit.service import record
@@ -104,4 +105,7 @@ class Orchestrator:
         record(session, actor_type=ActorType.agent, actor_id=run_id, action="agent.run", outcome=status.value,
                target_type="agent", target_id=spec.name)
         await session.commit()
+        AGENT_RUNS.labels(spec.name, status.value).inc()
+        LLM_TOKENS.labels(spec.name, "in").inc(state.tokens_in)
+        LLM_TOKENS.labels(spec.name, "out").inc(state.tokens_out)
         return run
