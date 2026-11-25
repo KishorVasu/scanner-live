@@ -175,7 +175,7 @@ scanners/images/
 database. It then runs concurrent dashboard reads for a fixed time and fails on any error or on an endpoint p95 over the
 budget (default 1 s).
 
-- **CI** (job `load-test`): 10 readers for 60 s against one API process. The job's report artifact holds the numbers.
+- **CI** (job `load-test`): 10 readers for 60 s against one API process. Run 12 (2026-11-25): 9,442 requests, 0 errors, worst endpoint p95 116 ms (`/api/overview`), API RSS 116 MiB.
 - **Dev PC** (2026-11-25, embedded Postgres, 10 readers for 20 s): 1,392 requests, 0 errors, worst endpoint p95 341 ms.
 - **Server** (needs OQ-1). This is the Phase 6 exit run: `sudo deploy/server/load_test.sh 300 10`.
   - It starts an isolated stack (`deploy/server/loadtest.compose.yml`, project `sp-loadtest`) with its own Postgres, its own API with the production image and limits, and an internal network.

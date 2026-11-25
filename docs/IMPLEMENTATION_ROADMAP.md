@@ -118,6 +118,8 @@ fallback on; JSON output only, the model gets no tools.
 
 ## Phase 5 — Dashboard and reports
 
+**Approved 2026-11-25** (built in `2b28b64`; e2e fixes in `7463522` and `1562d2d`; CI run 12 green, including the first passing Playwright + axe run).
+
 **Plan approved 2026-11-24** with these decisions: Playwright e2e runs on every push to `main` (not nightly);
 `@axe-core/playwright` added as a dev dependency for accessibility checks; reports carry an optional Claude narrative
 (labelled AI, never for `llm_allowed = false` projects, tables-only fallback, deterministic check against safety claims).
@@ -140,7 +142,7 @@ fallback on; JSON output only, the model gets no tools.
 - [ ] Restore from backup tested.
 - [ ] All projects onboarded.
 
-**Status (2026-11-25): built from the dev PC and CI; server and pilot steps open.**
+**Status (2026-11-25): built from the dev PC and CI (`428cfbd`, CI run 12: all 10 jobs green); server and pilot steps open.** CI load test: 9,442 requests in 60 s, 0 errors, worst endpoint p95 116 ms (budget 1 s), API RSS 116 MiB (limit 512 MiB).
 
 | Item | Done | Still open (who) |
 | --- | --- | --- |

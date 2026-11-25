@@ -2,7 +2,7 @@
 
 Self-hosted security monitoring for the company's projects. Read-only by design. Rules: [CLAUDE.md](CLAUDE.md). Design: [docs/](docs/).
 
-Status: Phase 3 (Scanning) approved; live scanner behaviour is verified in CI (`scanner-live`). Phase 4 (Intelligence) approved. Phase 5 (Dashboard and reports) is being planned.
+Status: Phase 3 (Scanning) approved; live scanner behaviour is verified in CI (`scanner-live`). Phase 4 (Intelligence) approved. Phase 5 (Dashboard and reports) approved. Phase 6 (Validation and rollout) built and green in CI; the server, pilot and onboarding steps are open (`docs/IMPLEMENTATION_ROADMAP.md`). Learning Notes was removed from scope.
 
 ## Layout
 
