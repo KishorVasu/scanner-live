@@ -33,3 +33,37 @@ body {
     margin-bottom: 0.25rem;
   }
 }
+
+// Lara's tag and text-button colours fail WCAG AA with white text (axe color-contrast), and the theme has no
+// `contrast` or `secondary` tag, so "not scanned" fell back to the default blue. Darker shades, all >= 4.5:1.
+.p-tag {
+  background: #1d4ed8;
+  color: #fff;
+
+  &.p-tag-success { background: #15803d; }
+  &.p-tag-info { background: #0369a1; }
+  &.p-tag-warning { background: #c2410c; }
+  &.p-tag-danger { background: #b91c1c; }
+  &.p-tag-secondary { background: #4b5563; }
+  &.p-tag-contrast { background: #111827; }
+}
+
+.p-button {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+}
+
+.p-button.p-button-danger:not(.p-button-text):not(.p-button-outlined) {
+  background: #b91c1c;
+  border-color: #b91c1c;
+}
+
+.p-button.p-button-text,
+.p-button.p-button-outlined {
+  color: #1d4ed8;
+}
+
+.p-tabview .p-tabview-nav li.p-highlight .p-tabview-nav-link {
+  color: #1d4ed8;
+  border-color: #1d4ed8;
+}

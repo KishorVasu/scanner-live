@@ -32,7 +32,7 @@ export default function OverviewPage() {
       {rows && rows.length === 0 && <p>No projects are registered yet, so nothing has been scanned.</p>}
       {rows && rows.length > 0 && (
         <DataTable value={rows} dataKey="project_id" paginator paginatorPosition="bottom" rows={25}
-          rowsPerPageOptions={[25, 50, 100]} size="small" stripedRows sortField="known_exploited" sortOrder={-1}>
+          size="small" stripedRows sortField="known_exploited" sortOrder={-1}>
           <Column header="Project" body={(r: Row) => <Link href={`/projects/${r.project_id}`}>{r.project}</Link>} sortable sortField="project" />
           <Column field="criticality" header="Criticality" sortable />
           <Column header="Scan coverage" body={(r: Row) => (

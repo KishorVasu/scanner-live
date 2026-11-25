@@ -44,8 +44,8 @@ export function pagedProps(p: { page: Page<unknown> | null; loading: boolean; fi
   onPage: (e: DataTableStateEvent) => void }) {
   return {
     lazy: true as const, loading: p.loading, paginator: true, paginatorPosition: "bottom" as const, first: p.first,
-    rows: p.rows, totalRecords: p.page?.total ?? 0, rowsPerPageOptions: [25, 50, 100], onPage: p.onPage,
-    paginatorTemplate: "FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown CurrentPageReport",
+    rows: p.rows, totalRecords: p.page?.total ?? 0, onPage: p.onPage,
+    paginatorTemplate: "FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink CurrentPageReport",
     currentPageReportTemplate: "{first}–{last} of {totalRecords}", size: "small" as const, stripedRows: true,
   };
 }

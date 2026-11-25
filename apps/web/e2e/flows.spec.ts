@@ -38,7 +38,7 @@ async function signIn(browser: Browser, who: string): Promise<Page> {
 async function noSeriousA11yIssues(page: Page) {
   const result = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze();
   const serious = result.violations.filter((v) => v.impact === "serious" || v.impact === "critical");
-  expect(serious.map((v) => `${v.id}: ${v.nodes.length} node(s)`)).toEqual([]);
+  expect(serious.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(" | ")}`)).toEqual([]);
 }
 
 test.describe.configure({ mode: "serial" });

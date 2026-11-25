@@ -40,7 +40,7 @@ function NewProject({ onDone }: { onDone: (created: boolean) => void }) {
       <div className="field"><label htmlFor="p-slug">Slug (lowercase, digits, hyphens)</label>
         <InputText id="p-slug" value={slug} onChange={(e) => setSlug(e.target.value)} style={{ width: "100%" }} /></div>
       <div className="field"><label htmlFor="p-crit">Criticality</label>
-        <Dropdown inputId="p-crit" value={criticality} options={CRIT} onChange={(e) => setCriticality(e.value)} /></div>
+        <Dropdown inputId="p-crit" pt={{ select: { "aria-label": "Criticality" }, trigger: { "aria-label": "Show Criticality options" } }} value={criticality} options={CRIT} onChange={(e) => setCriticality(e.value)} /></div>
       <div className="field"><Checkbox inputId="p-llm" checked={llm} onChange={(e) => setLlm(!!e.checked)} />
         <label htmlFor="p-llm"> Allow redacted findings to be sent to the LLM (OQ-6)</label></div>
       <Button label="Create" onClick={save} disabled={!name || !slug} />
@@ -64,7 +64,7 @@ export default function ProjectsPage() {
       {canManage && <Button label="New project" icon="pi pi-plus" onClick={() => setCreating(true)} />}
       {error && <p role="alert">{error}</p>}
       {rows && (
-        <DataTable value={rows} dataKey="id" paginator paginatorPosition="bottom" rows={25} rowsPerPageOptions={[25, 50, 100]}
+        <DataTable value={rows} dataKey="id" paginator paginatorPosition="bottom" rows={25}
           size="small" stripedRows emptyMessage="No projects are registered yet.">
           <Column header="Project" body={(p: Project) => <Link href={`/projects/${p.id}`}>{p.name}</Link>} sortable sortField="name" />
           <Column field="criticality" header="Criticality" sortable />

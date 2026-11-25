@@ -78,7 +78,7 @@ function TriageDialog({ id, onClose }: { id: string; onClose: (changed: boolean)
             <section aria-label="Triage">
               <h3>Triage</h3>
               <label htmlFor="triage-status">New status</label>
-              <Dropdown inputId="triage-status" value={status} options={opts(choices)} onChange={(e) => setStatus(e.value)}
+              <Dropdown inputId="triage-status" pt={{ select: { "aria-label": "New status" }, trigger: { "aria-label": "Show New status options" } }} value={status} options={opts(choices)} onChange={(e) => setStatus(e.value)}
                 placeholder="Choose" style={{ marginLeft: "0.5rem" }} />
               <div style={{ marginTop: "0.5rem" }}>
                 <label htmlFor="triage-note">Note{needsNote ? " (required, at least 10 characters)" : ""}</label>

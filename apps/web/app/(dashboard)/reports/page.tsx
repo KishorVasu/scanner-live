@@ -75,7 +75,7 @@ export default function ReportsPage() {
       {canGenerate && (
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginBottom: "0.75rem" }}>
           <label htmlFor="r-scope">Scope</label>
-          <Dropdown inputId="r-scope" value={scope} options={projects} onChange={(e) => setScope(e.value)} />
+          <Dropdown inputId="r-scope" pt={{ select: { "aria-label": "Scope" }, trigger: { "aria-label": "Show Scope options" } }} value={scope} options={projects} onChange={(e) => setScope(e.value)} />
           <Button label="Generate draft" onClick={generate} />
         </div>
       )}

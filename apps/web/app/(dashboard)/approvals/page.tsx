@@ -24,7 +24,7 @@ export default function ApprovalsPage() {
       {error && <p role="alert">{error}</p>}
       {rows && (
         <DataTable value={rows} dataKey="id" size="small" stripedRows paginator paginatorPosition="bottom" rows={25}
-          rowsPerPageOptions={[25, 50, 100]} emptyMessage="No approval requests.">
+          emptyMessage="No approval requests.">
           <Column header="Status" body={(a: Approval) => <StatusTag value={a.status} />} />
           <Column field="action" header="Action" />
           <Column header="Scope" body={(a: Approval) => <code>{JSON.stringify(a.scope)}</code>} />
